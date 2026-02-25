@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Story Scraper</title>
+    <style>
+        
+    </style>
+    <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+    <div class="contentArea">
+        <h3 class="storyTitle"></h3>
+        <article id="content"></article>
+    </div>
+    <nav>
+        <div class="progressBarArea">
+            <label for="progressBar">Progress</label>
+            <progress id="progressBar" value="0" max="100"></progress>
+            <output id="progressText">0%</output>
+        </div>
+        <div class="inputArea">
+            <div>
+                <label for="urlInput">Input URl</label>
+                <input type="text" id="urlInput" placeholder="Enter URL" value="https://exforum.live/threads/teacher-mummys-aur-average-student-adultery-incest.154843/">
+
+            </div>
+            <div>
+                <label for="authorName">Auther Name</label>
+                <input type="text" id="authorName" placeholder="Author Name" value="ApkiApeksha">
+            </div>
+            </div>
+        <div class="btnArea">
+            <button id="fetchBtn">Fetch Story</button>
+            <button id="downloadBtn">Download</button>
+        </div>
+    </nav>
+    <script src="script.js"></script>
+</body>
+</html>
