@@ -70,6 +70,12 @@ async function scrapeStoryWithImages(originalURL, authorName, baseFolder, progre
                 // 🔥 यही असली fix है
                 $content(img).attr("src", `/temp/${localPath}`);
             }
+
+            // ✅ Span की styling हटाओ लेकिन tag रहे
+            $content("span").each((i, el) => {
+                $content(el).removeAttr("style");
+            });
+
             finalHTML += $content.html() + "<hr/>";
         }
 
@@ -80,7 +86,8 @@ async function scrapeStoryWithImages(originalURL, authorName, baseFolder, progre
                 currentPage: i,
                 totalPages: lastPage,
                 checksum: finalHTML.length,
-                html: finalHTML
+                html: finalHTML,
+                title: title   // ← यहाँ title add किया
             });
         }
     }
