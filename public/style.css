@@ -42,15 +42,13 @@ nav .progressBarArea progress{
     margin: 5px 1rem;
     border-radius: 10px;
 }
+nav .inputArea{
+    margin-top: 0.6rem;
+}
 nav .inputArea input[type="text"]{
     width: 40rem;
     padding: 3px 5px;
     border-radius: 3px;
-}
-
-
-nav .inputArea{
-    margin-top: 0.6rem;
 }
 nav .btnArea{
     margin-top: 10px;
@@ -60,6 +58,7 @@ nav .btnArea{
     padding: 5px 10px;
     border-radius: 4px;
 }
+
 /* flex styling start */
 .progressBarArea{
     display: flex;
@@ -72,14 +71,14 @@ nav .btnArea{
 .progressBarArea progress{
     flex: 1 ;
 }
-.inputArea div{
+.inputArea > div{
     display: flex;
     margin-bottom: 5px;
 }
-.inputArea label{
+.inputArea > div > label{
     flex: 1 1 20%;
 }
-.inputArea input{
+.inputArea > div > input{
     margin: auto 1rem;
 }
 .btnArea{

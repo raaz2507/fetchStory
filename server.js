@@ -15,7 +15,7 @@ app.use("/api/story", storyRoutes);
 app.use("/temp", express.static(path.join(__dirname, "temp")));
 app.use("/downloads", express.static(path.join(__dirname, "downloads")));
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
 });

@@ -2,14 +2,11 @@
 <html>
 <head>
     <title>Story Scraper</title>
-    <style>
-        
-    </style>
     <link rel="stylesheet" href="./style.css">
 </head>
 <body>
     <div class="contentArea">
-        <h3 class="storyTitle"></h3>
+        <h1 class="storyTitle"></h1>
         <article id="content"></article>
     </div>
     <nav>
@@ -20,15 +17,22 @@
         </div>
         <div class="inputArea">
             <div>
-                <label for="urlInput">Input URl</label>
+                <label for="urlInput">Input URL</label>
                 <input type="text" id="urlInput" placeholder="Enter URL" value="https://exforum.live/threads/teacher-mummys-aur-average-student-adultery-incest.154843/">
 
             </div>
             <div>
-                <label for="authorName">Auther Name</label>
+                <label for="authorName">Author Name</label>
                 <input type="text" id="authorName" placeholder="Author Name" value="ApkiApeksha">
             </div>
+            <div>
+                <label for="startPage">Start Page</label>&emsp;
+                <input type="number" name="startPage" id="startPage" placeholder="Enter start page" value="" min="1">
+                &emsp;&emsp;&emsp;&emsp;
+                <label for="endPage">End Page</label>&emsp;
+                <input type="number" name="endPage" id="endPage" placeholder="Enter end page" value="" min="1">
             </div>
+        </div>
         <div class="btnArea">
             <button id="fetchBtn">Fetch Story</button>
             <button id="downloadBtn">Download</button>

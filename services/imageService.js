@@ -5,8 +5,16 @@ const crypto = require("crypto");
 
 const savedHashes = new Map();
 
-async function downloadImageWithHash(imgUrl, baseFolder, imageIndex, totalImages) {
-    console.log(`\n📸 [${imageIndex}/${totalImages}] Starting: ${imgUrl}`);
+async function downloadImageWithHash(imgUrl, baseFolder, imageIndex, totalImages, baseURL) {
+    let finalUrl;
+    try {
+        finalUrl = new URL(imgUrl, baseURL).href;
+    } catch (err) {
+        console.log(`Invalid image URL: ${imgUrl}`);
+        return null;
+    }
+
+    console.log(`\nImage [${imageIndex}/${totalImages}] starting: ${finalUrl}`);
 
     const imagesFolder = path.join(baseFolder, "images");
     if (!fs.existsSync(imagesFolder)) {
@@ -14,16 +22,16 @@ async function downloadImageWithHash(imgUrl, baseFolder, imageIndex, totalImages
     }
 
     const response = await axios({
-        url: imgUrl,
+        url: finalUrl,
         responseType: "stream"
     });
 
-    const totalLength = response.headers["content-length"];
+    const totalLength = Number(response.headers["content-length"] || 0);
     let downloadedLength = 0;
     const chunks = [];
 
     if (totalLength) {
-        console.log(`📦 Size: ${Math.round(totalLength / 1024)} KB`);
+        console.log(`Image size: ${Math.round(totalLength / 1024)} KB`);
     }
 
     response.data.on("data", (chunk) => {
@@ -32,9 +40,7 @@ async function downloadImageWithHash(imgUrl, baseFolder, imageIndex, totalImages
 
         if (totalLength) {
             const percent = ((downloadedLength / totalLength) * 100).toFixed(1);
-            process.stdout.write(
-                `⏳ Image ${imageIndex}: ${percent}%\r`
-            );
+            process.stdout.write(`Image ${imageIndex}: ${percent}%\r`);
         }
     });
 
@@ -44,18 +50,14 @@ async function downloadImageWithHash(imgUrl, baseFolder, imageIndex, totalImages
     });
 
     const buffer = Buffer.concat(chunks);
-
-    const hash = crypto.createHash("sha256")
-        .update(buffer)
-        .digest("hex")
-        .slice(0, 10);
+    const hash = crypto.createHash("sha256").update(buffer).digest("hex").slice(0, 10);
 
     if (savedHashes.has(hash)) {
-        console.log(`\n♻ Duplicate skipped`);
+        console.log("\nDuplicate image skipped");
         return savedHashes.get(hash);
     }
 
-    const ext = path.extname(imgUrl.split("?")[0]) || ".jpg";
+    const ext = path.extname(new URL(finalUrl).pathname) || ".jpg";
     const fileName = `${hash}${ext}`;
     const filePath = path.join(imagesFolder, fileName);
 
@@ -64,36 +66,9 @@ async function downloadImageWithHash(imgUrl, baseFolder, imageIndex, totalImages
     const relativePath = `images/${fileName}`;
     savedHashes.set(hash, relativePath);
 
-    console.log(`\n💾 Saved as ${fileName}`);
+    console.log(`\nSaved image as ${fileName}`);
 
     return relativePath;
-}
-async function downloadImagesBatch(imageUrls, baseFolder) {
-    console.log(`\n🚀 Starting batch download`);
-    console.log(`🖼 Total images: ${imageUrls.length}`);
-
-    const totalImages = imageUrls.length;
-    let completed = 0;
-
-    for (let i = 0; i < totalImages; i++) {
-        try {
-            await downloadImageWithHash(
-                imageUrls[i],
-                baseFolder,
-                i + 1,
-                totalImages
-            );
-
-            completed++;
-
-            const overallPercent = ((completed / totalImages) * 100).toFixed(1);
-            console.log(`📊 Overall Progress: ${overallPercent}%`);
-        } catch (err) {
-            console.error(`❌ Failed: ${imageUrls[i]}`);
-        }
-    }
-
-    console.log(`\n🎉 Batch Download Complete!`);
 }
 
 module.exports = { downloadImageWithHash };

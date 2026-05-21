@@ -3,93 +3,70 @@ const storyTitle = document.querySelector(".storyTitle");
 const progressBar = document.getElementById("progressBar");
 const progressText = document.getElementById("progressText");
 
-
 document.getElementById("fetchBtn").addEventListener("click", () => {
-
     contentDiv.innerHTML = "";
+    storyTitle.textContent = "";
     progressBar.value = 0;
+    progressText.textContent = "0%";
 
-    const url = document.getElementById("urlInput").value;
-    const author = document.getElementById("authorName").value;
+    const url = document.getElementById("urlInput").value.trim();
+    const author = document.getElementById("authorName").value.trim();
+    const startPage = document.getElementById("startPage").value;
+    const endPage = document.getElementById("endPage").value;
 
-    const eventSource = new EventSource(
-        `/api/story?url=${encodeURIComponent(url)}&author=${encodeURIComponent(author)}`
-    );
+    const params = new URLSearchParams({ url, author });
+    if (startPage) params.set("startPage", startPage);
+    if (endPage) params.set("endPage", endPage);
+
+    const eventSource = new EventSource(`/api/story?${params.toString()}`);
+
     eventSource.onerror = (err) => {
         console.error("SSE error", err);
         eventSource.close();
-        progressText.textContent = "❌ Connection error";
+        progressText.textContent = "Connection error";
     };
-    
-    eventSource.onmessage = (event) => {
 
+    eventSource.onmessage = (event) => {
         const data = JSON.parse(event.data);
+
+        if (data.error) {
+            eventSource.close();
+            progressText.textContent = data.error;
+            return;
+        }
 
         if (data.done) {
             eventSource.close();
             return;
         }
 
-        // ✅ Update progress
         progressBar.value = data.percent;
         progressText.textContent =
             `Page ${data.currentPage}/${data.totalPages} | ${data.percent}% | Blocks: ${data.checksum}`;
 
-        // ✅ Append content live
         if (data.html) {
-            contentDiv.insertAdjacentHTML("beforeend", data.html);
+            contentDiv.innerHTML = data.html;
         }
 
-        // ✅ Story title set
         if (data.title && storyTitle.textContent === "") {
             storyTitle.textContent = data.title;
         }
     };
 });
 
-const downloadBtn = document.getElementById("downloadBtn");
-
-// downloadBtn.addEventListener("click", async () => {
-
-//     const contentHTML = document.querySelector("#content").innerHTML;
-
-//     const response = await fetch("/api/story/download", {
-//         method: "POST",
-//         headers: { "Content-Type": "application/json" },
-//         body: JSON.stringify({
-//             html: contentHTML,
-//             title: document.title
-//         })
-//     });
-
-//     if (response.ok) {
-//         const blob = await response.blob();
-//         const link = document.createElement("a");
-//         link.href = URL.createObjectURL(blob);
-//         link.download = "story.zip";
-//         link.click();
-//     } else {
-//         alert("Download failed");
-//     }
-
-// });
-downloadBtn.addEventListener("click", function() {
-    // Clone element
+document.getElementById("downloadBtn").addEventListener("click", function() {
     const contentArea = document.querySelector(".contentArea");
-
     const clone = contentArea.cloneNode(true);
-    
-    // Convert all img src to base64 so they work offline
     const images = clone.querySelectorAll("img");
     const promises = [];
 
-    images.forEach(img => {
+    images.forEach((img) => {
         const promise = fetch(img.src)
-            .then(res => res.blob())
-            .then(blob => new Promise((resolve) => {
+            .then((res) => res.blob())
+            .then((blob) => new Promise((resolve) => {
                 const reader = new FileReader();
                 reader.onloadend = () => {
-                    img.src = reader.result; // base64
+                    img.src = reader.result;
                     resolve();
                 };
                 reader.readAsDataURL(blob);
@@ -98,8 +75,7 @@ downloadBtn.addEventListener("click", function() {
     });
 
     Promise.all(promises).then(() => {
-        // Wrap in full HTML
-        const htmlContent = 
+        const htmlContent =
 `<!DOCTYPE html>
 <html>
 <head>
@@ -131,13 +107,13 @@ downloadBtn.addEventListener("click", function() {
 <body>${clone.outerHTML}</body>
 </html>`;
 
-        // Create blob and download
         const blob = new Blob([htmlContent], { type: "text/html" });
         const url = URL.createObjectURL(blob);
-
         const a = document.createElement("a");
+        const title = storyTitle.textContent.trim() || "story";
+
         a.href = url;
-        a.download = `${storyTitle.textContent}.html`;
+        a.download = `${title}.html`;
         a.click();
         URL.revokeObjectURL(url);
     });
