@@ -10,10 +10,25 @@
         <article id="content"></article>
     </div>
     <nav>
-        <div class="progressBarArea">
-            <label for="progressBar">Progress</label>
-            <progress id="progressBar" value="0" max="100"></progress>
-            <output id="progressText">0%</output>
+        <div class="progressStack">
+            <div class="progressBarArea">
+                <label for="progressBar">Overall</label>
+                <progress id="progressBar" value="0" max="100"></progress>
+                <output id="progressText">0%</output>
+            </div>
+            <div class="progressBarArea">
+                <label for="pageProgressBar">Page</label>
+                <progress id="pageProgressBar" value="0" max="100"></progress>
+                <output id="pageProgressText">0%</output>
+            </div>
+            <div class="progressBarArea">
+                <label for="imageProgressBar">Image</label>
+                <progress id="imageProgressBar" value="0" max="100"></progress>
+                <output id="imageProgressText">0%</output>
+            </div>
+        </div>
+        <div class="statsArea" id="statsText">
+            Posts: 0 | Images: 0 downloaded, 0 skipped
         </div>
         <div class="inputArea">
             <div>
@@ -25,17 +40,31 @@
                 <label for="authorName">Author Name</label>
                 <input type="text" id="authorName" placeholder="Author Name" value="ApkiApeksha">
             </div>
-            <div>
-                <label for="startPage">Start Page</label>&emsp;
+            <div class="pageRange">
+                <label for="startPage">Start</label>
                 <input type="number" name="startPage" id="startPage" placeholder="Enter start page" value="" min="1">
-                &emsp;&emsp;&emsp;&emsp;
-                <label for="endPage">End Page</label>&emsp;
+                <label for="endPage">End</label>
                 <input type="number" name="endPage" id="endPage" placeholder="Enter end page" value="" min="1">
+            </div>
+            <div class="optionRow">
+                <label for="loadImages">Load Images</label>
+                <input type="checkbox" id="loadImages" checked>
+            </div>
+            <div class="optionRow">
+                <label for="themeSelect">Theme</label>
+                <select id="themeSelect">
+                    <option value="light">Light</option>
+                    <option value="dark">Dark</option>
+                </select>
             </div>
         </div>
         <div class="btnArea">
+            <button id="getMeta" title="Get story title and total pages">Get Meta</button>
             <button id="fetchBtn">Fetch Story</button>
+            <button id="cancelFetchBtn" disabled>Cancel Fetch</button>
             <button id="downloadBtn">Download</button>
+            <button id="loadFromCache">Load from Cache</button>
+            <button id="clearCache">Clear Cache</button>
         </div>
     </nav>
     <script src="script.js"></script>

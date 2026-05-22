@@ -5,12 +5,11 @@ const crypto = require("crypto");
 
 const savedHashes = new Map();
 
-async function downloadImageWithHash(imgUrl, baseFolder, imageIndex, totalImages, baseURL) {
+async function downloadImageWithHash(imgUrl, baseFolder, imageIndex, totalImages, baseURL, signal, progressCallback) {
     let finalUrl;
     try {
         finalUrl = new URL(imgUrl, baseURL).href;
     } catch (err) {
-        console.log(`Invalid image URL: ${imgUrl}`);
         return null;
     }
 
@@ -23,12 +22,17 @@ async function downloadImageWithHash(imgUrl, baseFolder, imageIndex, totalImages
 
     const response = await axios({
         url: finalUrl,
-        responseType: "stream"
+        responseType: "stream",
+        signal,
+        timeout: 30000
     });
 
     const totalLength = Number(response.headers["content-length"] || 0);
+    const tempFilePath = path.join(imagesFolder, `download-${Date.now()}-${imageIndex}.tmp`);
+    const writer = fs.createWriteStream(tempFilePath);
+    const hash = crypto.createHash("sha256");
     let downloadedLength = 0;
-    const chunks = [];
+    let lastProgressPercent = -1;
 
     if (totalLength) {
         console.log(`Image size: ${Math.round(totalLength / 1024)} KB`);
@@ -36,39 +40,93 @@ async function downloadImageWithHash(imgUrl, baseFolder, imageIndex, totalImages
 
     response.data.on("data", (chunk) => {
         downloadedLength += chunk.length;
-        chunks.push(chunk);
+        hash.update(chunk);
 
+        const imagePercent = totalLength ? Math.floor((downloadedLength / totalLength) * 100) : 0;
         if (totalLength) {
-            const percent = ((downloadedLength / totalLength) * 100).toFixed(1);
-            process.stdout.write(`Image ${imageIndex}: ${percent}%\r`);
+            process.stdout.write(`Image ${imageIndex}: ${imagePercent}%\r`);
+        }
+
+        if (progressCallback && shouldReportProgress(imagePercent, lastProgressPercent, downloadedLength, totalLength)) {
+            lastProgressPercent = imagePercent;
+            progressCallback({
+                imageIndex,
+                totalImages,
+                imagePercent,
+                downloadedBytes: downloadedLength,
+                totalBytes: totalLength,
+                imageUrl: finalUrl
+            });
         }
     });
 
     await new Promise((resolve, reject) => {
-        response.data.on("end", resolve);
-        response.data.on("error", reject);
+        let abort;
+        const cleanup = () => {
+            if (signal && abort) signal.removeEventListener("abort", abort);
+        };
+        abort = () => {
+            response.data.destroy();
+            writer.destroy();
+            cleanup();
+            reject(createScrapeError("FETCH_CANCELLED", "Fetch cancelled"));
+        };
+
+        writer.on("finish", () => {
+            cleanup();
+            resolve();
+        });
+        writer.on("error", (err) => {
+            cleanup();
+            reject(err);
+        });
+        response.data.on("error", (err) => {
+            cleanup();
+            reject(err);
+        });
+
+        if (signal) {
+            if (signal.aborted) {
+                abort();
+                return;
+            }
+            signal.addEventListener("abort", abort, { once: true });
+        }
+
+        response.data.pipe(writer);
     });
 
-    const buffer = Buffer.concat(chunks);
-    const hash = crypto.createHash("sha256").update(buffer).digest("hex").slice(0, 10);
+    const digest = hash.digest("hex").slice(0, 10);
 
-    if (savedHashes.has(hash)) {
+    if (savedHashes.has(digest)) {
+        fs.rmSync(tempFilePath, { force: true });
         console.log("\nDuplicate image skipped");
-        return savedHashes.get(hash);
+        return savedHashes.get(digest);
     }
 
     const ext = path.extname(new URL(finalUrl).pathname) || ".jpg";
-    const fileName = `${hash}${ext}`;
+    const fileName = `${digest}${ext}`;
     const filePath = path.join(imagesFolder, fileName);
 
-    fs.writeFileSync(filePath, buffer);
+    fs.renameSync(tempFilePath, filePath);
 
     const relativePath = `images/${fileName}`;
-    savedHashes.set(hash, relativePath);
+    savedHashes.set(digest, relativePath);
 
     console.log(`\nSaved image as ${fileName}`);
 
     return relativePath;
+}
+
+function shouldReportProgress(currentPercent, lastPercent, downloadedLength, totalLength) {
+    if (!totalLength) return downloadedLength === 0;
+    return currentPercent === 100 || currentPercent >= lastPercent + 5;
+}
+
+function createScrapeError(code, message) {
+    const err = new Error(message);
+    err.code = code;
+    return err;
 }
 
 module.exports = { downloadImageWithHash };

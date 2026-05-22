@@ -1,89 +1,243 @@
-html, body {
-    width:100%;
-    height: 100%;
+html,
+body {
+    width: 100%;
+    min-height: 100%;
 }
-*{
+
+:root {
+    color-scheme: light;
+    --page-bg: #f8fbfa;
+    --text: #17201d;
+    --muted: #315247;
+    --panel-bg: rgba(237, 252, 247, 0.96);
+    --panel-border: rgba(33, 115, 91, 0.22);
+    --content-bg: #ffffff;
+    --content-border: rgba(0, 0, 0, 0.186);
+    --shadow: rgba(0, 0, 0, 0.6);
+    --field-bg: #ffffff;
+    --field-text: #17201d;
+    --field-border: rgba(0, 0, 0, 0.25);
+    --button-bg: #ffffff;
+    --button-text: #17201d;
+    --button-border: rgba(0, 0, 0, 0.28);
+}
+
+:root[data-theme="dark"] {
+    color-scheme: dark;
+    --page-bg: #111816;
+    --text: #ecf4f1;
+    --muted: #a9c8be;
+    --panel-bg: rgba(24, 34, 31, 0.97);
+    --panel-border: rgba(169, 200, 190, 0.22);
+    --content-bg: #18221f;
+    --content-border: rgba(236, 244, 241, 0.16);
+    --shadow: rgba(0, 0, 0, 0.85);
+    --field-bg: #101715;
+    --field-text: #ecf4f1;
+    --field-border: rgba(236, 244, 241, 0.25);
+    --button-bg: #22302c;
+    --button-text: #ecf4f1;
+    --button-border: rgba(236, 244, 241, 0.25);
+}
+
+* {
     padding: 0;
-    margin:0;
+    margin: 0;
     box-sizing: border-box;
 }
-/* body *{ border: 1px solid red;} */
-.contentArea{
+
+body {
+    padding-bottom: 13rem;
+    font-family: Arial, Helvetica, sans-serif;
+    background: var(--page-bg);
+    color: var(--text);
+}
+
+.contentArea {
     width: 98%;
     margin: 1rem auto 2rem;
 }
-.contentArea .storyTitle{
+
+.contentArea .storyTitle {
     text-align: center;
     margin: 5px auto 10px;
-}
-.contentArea #content{
-    width: 95%;
-    max-width: 210mm;
-    margin: 1rem auto 1rem;
-    min-height: 1rem;
-    padding: 3rem 2.5rem;
-    border: 1px solid rgba(0, 0, 0, 0.186);
-    border-radius: 3px;
-    box-shadow: 2px 2px 13px -3px rgba(0, 0, 0, 0.619);
-    text-align: justify;
-    font-size: 1rem;
-}
-nav{
-    position: fixed;
-    bottom:2rem;
-    left: 50%;
-    transform: translateX(-50%);
-    background-color: rgba(127, 255, 212, 0.5);
-    padding: 2rem;
-    border-radius: 5px;
-    box-shadow: 2px 2px 12px -3px rgba(0, 0, 0, 0.6);
-}
-nav .progressBarArea progress{
-    margin: 5px 1rem;
-    border-radius: 10px;
-}
-nav .inputArea{
-    margin-top: 0.6rem;
-}
-nav .inputArea input[type="text"]{
-    width: 40rem;
-    padding: 3px 5px;
-    border-radius: 3px;
-}
-nav .btnArea{
-    margin-top: 10px;
-}
-.btnArea button{
-    margin: 5px 10px;
-    padding: 5px 10px;
-    border-radius: 4px;
+    font-size: clamp(1.3rem, 2vw, 2rem);
 }
 
-/* flex styling start */
-.progressBarArea{
-    display: flex;
+.contentArea #content {
+    width: 95%;
+    max-width: 210mm;
+    margin: 1rem auto;
+    min-height: 1rem;
+    padding: 3rem 2.5rem;
+    background: var(--content-bg);
+    border: 1px solid var(--content-border);
+    border-radius: 3px;
+    box-shadow: 2px 2px 13px -3px var(--shadow);
+    text-align: justify;
+    font-size: 1rem;
+    overflow-wrap: anywhere;
+}
+
+nav {
+    position: fixed;
+    bottom: 1rem;
+    left: 50%;
+    width: min(72rem, calc(100vw - 1rem));
+    max-height: calc(100vh - 2rem);
+    overflow: auto;
+    transform: translateX(-50%);
+    background-color: var(--panel-bg);
+    padding: 1rem;
+    border: 1px solid var(--panel-border);
+    border-radius: 6px;
+    box-shadow: 2px 2px 12px -3px var(--shadow);
+}
+
+.progressStack {
+    display: grid;
+    gap: 0.4rem;
+}
+
+.progressBarArea {
+    display: grid;
+    /* 3 columns: fixed text for label, expanding middle for bar, fixed text for % */
+    grid-template-columns: 1fr 5fr 1fr; 
     align-items: center;
-    justify-content: center; 
+    gap: 1rem; /* Clean spacing between elements */
 }
 .progressBarArea label{
     
 }
-.progressBarArea progress{
-    flex: 1 ;
+.progressBarArea output{
+
 }
-.inputArea > div{
-    display: flex;
-    margin-bottom: 5px;
+.progressBarArea progress {
+    width: 100%;
+    min-width: 0;
+    border-radius: 10px;
 }
-.inputArea > div > label{
-    flex: 1 1 20%;
+
+.statsArea {
+    margin-top: 0.35rem;
+    color: var(--muted);
+    font-size: 0.9rem;
+    text-align: center;
 }
-.inputArea > div > input{
-    margin: auto 1rem;
+
+.inputArea {
+    display: grid;
+    grid-template-columns: minmax(16rem, 1fr) minmax(12rem, 0.45fr) minmax(13rem, 0.35fr) minmax(8rem, 0.2fr);
+    gap: 0.6rem;
+    margin-top: 0.75rem;
 }
-.btnArea{
-    display: flex;
+
+.inputArea > div {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.4rem;
     align-items: center;
-    justify-content: space-evenly;
 }
-/* flex styling end */
+
+.inputArea > div > label {
+    white-space: nowrap;
+    font-size: 0.9rem;
+}
+
+.inputArea input,
+.inputArea select {
+    width: 100%;
+    min-width: 0;
+    padding: 0.35rem 0.45rem;
+    color: var(--field-text);
+    background: var(--field-bg);
+    border: 1px solid var(--field-border);
+    border-radius: 3px;
+}
+
+.inputArea .pageRange {
+    grid-template-columns: auto minmax(3.75rem, 1fr) auto minmax(3.75rem, 1fr);
+}
+
+.inputArea .optionRow {
+    grid-template-columns: auto auto;
+    justify-content: start;
+}
+
+.inputArea input[type="checkbox"] {
+    width: auto;
+    min-width: 1rem;
+    accent-color: #35a37b;
+}
+
+.btnArea {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-top: 0.8rem;
+}
+
+.btnArea button {
+    min-height: 2rem;
+    padding: 0.35rem 0.7rem;
+    color: var(--button-text);
+    background: var(--button-bg);
+    border: 1px solid var(--button-border);
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.btnArea button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+@media (max-width: 760px) {
+    body {
+        padding-bottom: 21rem;
+    }
+
+    .contentArea #content {
+        width: 100%;
+        padding: 1.25rem;
+    }
+
+    nav {
+        bottom: 0.5rem;
+        width: calc(100vw - 0.75rem);
+        padding: 0.75rem;
+    }
+    .progressStack{
+        /* grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); */
+    }
+    .progressStack,
+   
+    .inputArea {
+        grid-template-columns: 1fr;
+    }
+
+    .progressBarArea {
+        gap: 0.35rem;
+    }
+
+    .progressBarArea label,
+    .progressBarArea output {
+        text-align: center;
+    }
+
+    .inputArea > div,
+    .inputArea .pageRange {
+        grid-template-columns: 1fr;
+    }
+
+    .btnArea {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .btnArea button {
+        width: 100%;
+    }
+}

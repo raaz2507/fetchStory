@@ -13,6 +13,7 @@ app.use(express.static("public"));
 app.use("/api/story", storyRoutes);
 
 app.use("/temp", express.static(path.join(__dirname, "temp")));
+app.use('/temp/images', express.static(path.join(__dirname, 'temp', 'images')));
 app.use("/downloads", express.static(path.join(__dirname, "downloads")));
 
 const PORT = process.env.PORT || 3000;

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Offline Reader</title>
+    <style>
+        body { margin: 0; padding: 0; background-color: #f4f4f9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #333; }
+        .reader-container { width: 95%; max-width: 800px; margin: 2rem auto; background: #fff; padding: 2.5rem; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); box-sizing: border-box; }
+        h1.story-title { text-align: center; margin-bottom: 2rem; color: #111; border-bottom: 2px solid #eee; padding-bottom: 1rem; font-size: 1.8rem; line-height: 1.4; }
+        #content-area { text-align: justify; line-height: 1.8; font-size: 1.1rem; }
+        .story-page { padding: 2rem 0; border-bottom: 1px dashed #ddd; animation: fadeIn 0.5s ease-in; }
+        /* ब्लॉक कोट्स (कमेंट्स) को थोड़ा छोटा और हल्का दिखाना ताकि मुख्य स्टोरी अलग दिखे */
+        .bbCodeBlock { background: #f9f9f9; border-left: 3px solid #ccc; padding: 0.5rem 1rem; margin: 1rem 0; font-size: 0.95rem; color: #666; }
+        .bbCodeBlock-title { font-weight: bold; font-size: 0.85rem; margin-bottom: 0.3rem; }
+        .story-page img { max-width: 100%; height: auto; display: block; margin: 1rem auto; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .loading-status { text-align: center; color: #777; padding: 2rem; font-style: italic; font-weight: bold; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+    <div class="reader-container">
+        <h1 class="story-title" id="story-main-title">Loading Story Name...</h1>
+        <div id="content-area"></div>
+        <div id="status" class="loading-status">Loading story content...</div>
+    </div>
+    <script>
+    let storyData = null; 
+    let pageKeys = [];      
+    let keyIndex = 0;       
+    let isLoading = false;
+    
+    const contentArea = document.getElementById("content-area"); 
+    const statusDiv = document.getElementById("status");
+    const titleElement = document.getElementById("story-main-title");
+
+    // 1. JSON फ़ाइल लोड करें
+    async function loadStoryJson() {
+        try {
+            const response = await fetch("./story_data.json");
+            storyData = await response.json(); 
+            statusDiv.textContent = ""; 
+            
+            if (storyData && storyData.storyName) {
+                titleElement.textContent = storyData.storyName;
+                document.title = storyData.storyName + " - Offline Reader";
+            }
+
+            if (storyData && storyData.posts) {
+                pageKeys = Object.keys(storyData.posts).sort((a, b) => Number(a) - Number(b));
+            }
+
+            // पहला उपलब्ध भाग लोड करना शुरू करें
+            loadNextPage();
+        } catch (err) {
+            console.error(err); 
+            statusDiv.textContent = "Failed to load data. Please use a Local Server environment.";
+        }
+    }
+
+    // 2. कोर लोडिंग फंक्शन (स्मार्ट ऑटो-स्किप के साथ)
+    function loadNextPage() {
+        // अगर पहले से लोड हो रहा है या डेटा खत्म हो गया है
+        if (isLoading || !storyData || pageKeys.length === 0) return;
+        
+        if (keyIndex >= pageKeys.length) { 
+            statusDiv.textContent = "— End of Story —"; 
+            return; 
+        }
+
+        isLoading = true; 
+        
+        const actualPageNum = pageKeys[keyIndex];
+        // 💡 सुधार: यूजर को भ्रम से बचाने के लिए "Tracking Part" लिख दिया है
+        statusDiv.textContent = "Checking Content Part " + actualPageNum + "...";
+
+        let pageHtml = storyData.posts[actualPageNum];
+
+        // 💡 जादुई सुधार: चेक करें कि क्या पेज सच में खाली है या सिर्फ खाली HTML टैग्स हैं
+        const isHtmlEmpty = !pageHtml || pageHtml.replace(/<[^>]*>/g, '').trim() === "";
+
+        if (!isHtmlEmpty) {
+            // अगर कंटेंट मौजूद है, तो उसे रेंडर करें
+            const pageDiv = document.createElement("div"); 
+            pageDiv.className = "story-page"; 
+            
+            // Image Path Fixer Logic
+            const tempDiv = document.createElement("div");
+            tempDiv.innerHTML = pageHtml;
+            
+            const images = tempDiv.getElementsByTagName("img");
+            for (let img of images) {
+                const currentSrc = img.getAttribute("src");
+                if (currentSrc) {
+                    if (currentSrc.includes("/temp/images/")) {
+                        img.setAttribute("src", currentSrc.replace(/\/temp\/images\//g, "./images/"));
+                    } else if (currentSrc.startsWith("images/")) {
+                        img.setAttribute("src", "./" + currentSrc);
+                    } else if (!currentSrc.startsWith("./images/") && !currentSrc.startsWith("http")) {
+                        const fileName = currentSrc.split('/').pop();
+                        img.setAttribute("src", "./images/" + fileName);
+                    }
+                }
+            }
+
+            pageDiv.innerHTML = tempDiv.innerHTML;
+            contentArea.appendChild(pageDiv);
+            
+            keyIndex++; 
+            statusDiv.textContent = "";
+            isLoading = false;
+
+            // कंटेंट लोड होने के बाद थोड़ा रुककर चेक करें कि अगला पेज खुद लोड करना है या यूजर स्क्रॉल करेगा
+            setTimeout(() => {
+                const docHeight = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight, document.body.offsetHeight);
+                if (docHeight <= window.innerHeight && keyIndex < pageKeys.length) { 
+                    loadNextPage(); 
+                }
+            }, 100);
+
+        } else {
+            // 💡 मास्टरस्ट्रोक सुधार: अगर यह पेज/पार्ट खाली ("") मिला, तो बिना रुके 
+            // तुरंत अगले इंडेक्स पर बढ़ें और बिना अटके `loadNextPage` को दोबारा कॉल कर लें!
+            console.log(`Part ${actualPageNum} is empty, skipping to next...`);
+            keyIndex++;
+            isLoading = false;
+            
+            // बिना टाइम गंवाए तुरंत अगला पार्ट चेक करें
+            loadNextPage();
+        }
+    }
+
+    // 3. इनफिनिट स्क्रॉल डिटेक्शन
+    window.addEventListener("scroll", () => {
+        const totalHeight = document.documentElement.scrollHeight || document.body.scrollHeight;
+        const currentScroll = window.innerHeight + (window.scrollY || document.documentElement.scrollTop);
+
+        // बॉटम से 800px पहले ही ट्रिगर कर दें
+        if (currentScroll >= totalHeight - 800) { 
+            loadNextPage(); 
+        }
+    });
+
+    // शुरुआत करें
+    loadStoryJson();
+</script>
+</body>
+</html>
