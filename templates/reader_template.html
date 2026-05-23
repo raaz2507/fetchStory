@@ -1,148 +1,798 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="hi">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Offline Reader</title>
-    <style>
-        body { margin: 0; padding: 0; background-color: #f4f4f9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #333; }
-        .reader-container { width: 95%; max-width: 800px; margin: 2rem auto; background: #fff; padding: 2.5rem; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); box-sizing: border-box; }
-        h1.story-title { text-align: center; margin-bottom: 2rem; color: #111; border-bottom: 2px solid #eee; padding-bottom: 1rem; font-size: 1.8rem; line-height: 1.4; }
-        #content-area { text-align: justify; line-height: 1.8; font-size: 1.1rem; }
-        .story-page { padding: 2rem 0; border-bottom: 1px dashed #ddd; animation: fadeIn 0.5s ease-in; }
-        /* ब्लॉक कोट्स (कमेंट्स) को थोड़ा छोटा और हल्का दिखाना ताकि मुख्य स्टोरी अलग दिखे */
-        .bbCodeBlock { background: #f9f9f9; border-left: 3px solid #ccc; padding: 0.5rem 1rem; margin: 1rem 0; font-size: 0.95rem; color: #666; }
-        .bbCodeBlock-title { font-weight: bold; font-size: 0.85rem; margin-bottom: 0.3rem; }
-        .story-page img { max-width: 100%; height: auto; display: block; margin: 1rem auto; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-        .loading-status { text-align: center; color: #777; padding: 2rem; font-style: italic; font-weight: bold; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-    </style>
-</head>
-<body>
-    <div class="reader-container">
-        <h1 class="story-title" id="story-main-title">Loading Story Name...</h1>
-        <div id="content-area"></div>
-        <div id="status" class="loading-status">Loading story content...</div>
-    </div>
-    <script>
-    let storyData = null; 
-    let pageKeys = [];      
-    let keyIndex = 0;       
-    let isLoading = false;
-    
-    const contentArea = document.getElementById("content-area"); 
-    const statusDiv = document.getElementById("status");
-    const titleElement = document.getElementById("story-main-title");
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Offline Reader Pro</title>
+		<style>
+			/* 💡 थीम वेरिएबल्स */
+			:root {
+				--bg-color: #f4f4f9;
+				--container-bg: #ffffff;
+				--text-color: #333333;
+				--title-color: #111111;
+				--border-color: #eeeeee;
+				--dashed-border: #dddddd;
+				--quote-bg: #f9f9f9;
+				--quote-border: #cccccc;
+				--quote-text: #666666;
+				--sidebar-bg: #ffffff;
+				--sidebar-boxshadow: rgba(0, 0, 0, 0.15);
+			}
 
-    // 1. JSON फ़ाइल लोड करें
-    async function loadStoryJson() {
-        try {
-            const response = await fetch("./story_data.json");
-            storyData = await response.json(); 
-            statusDiv.textContent = ""; 
-            
-            if (storyData && storyData.storyName) {
-                titleElement.textContent = storyData.storyName;
-                document.title = storyData.storyName + " - Offline Reader";
-            }
+			[data-theme="dark"] {
+				--bg-color: #121212;
+				--container-bg: #1e1e1e;
+				--text-color: #e0e0e0;
+				--title-color: #ffffff;
+				--border-color: #333333;
+				--dashed-border: #444444;
+				--quote-bg: #2a2a2a;
+				--quote-border: #555555;
+				--quote-text: #b0b0b0;
+				--sidebar-bg: #1e1e1e;
+				--sidebar-boxshadow: rgba(0, 0, 0, 0.5);
+			}
 
-            if (storyData && storyData.posts) {
-                pageKeys = Object.keys(storyData.posts).sort((a, b) => Number(a) - Number(b));
-            }
+			[data-theme="sepia"] {
+				--bg-color: #f4ecd8;
+				--container-bg: #fdf6e3;
+				--text-color: #5b4636;
+				--title-color: #433422;
+				--border-color: #e4d9c4;
+				--dashed-border: #d3c7ae;
+				--quote-bg: #f5edd5;
+				--quote-border: #b8a98f;
+				--quote-text: #7c6853;
+				--sidebar-bg: #fdf6e3;
+				--sidebar-boxshadow: rgba(0, 0, 0, 0.1);
+			}
 
-            // पहला उपलब्ध भाग लोड करना शुरू करें
-            loadNextPage();
-        } catch (err) {
-            console.error(err); 
-            statusDiv.textContent = "Failed to load data. Please use a Local Server environment.";
-        }
-    }
+			[data-theme="forest"] {
+				--bg-color: #14221c;
+				--container-bg: #1a2e26;
+				--text-color: #cbdad5;
+				--title-color: #e8f1ed;
+				--border-color: #264237;
+				--dashed-border: #2d4f41;
+				--quote-bg: #1f372d;
+				--quote-border: #3b6655;
+				--quote-text: #9cb4ab;
+				--sidebar-bg: #1a2e26;
+				--sidebar-boxshadow: rgba(0, 0, 0, 0.4);
+			}
 
-    // 2. कोर लोडिंग फंक्शन (स्मार्ट ऑटो-स्किप के साथ)
-    function loadNextPage() {
-        // अगर पहले से लोड हो रहा है या डेटा खत्म हो गया है
-        if (isLoading || !storyData || pageKeys.length === 0) return;
-        
-        if (keyIndex >= pageKeys.length) { 
-            statusDiv.textContent = "— End of Story —"; 
-            return; 
-        }
+			[data-theme="cyber"] {
+				--bg-color: #0c0f1d;
+				--container-bg: #121829;
+				--text-color: #00ffcc;
+				--title-color: #ff007f;
+				--border-color: #ff007f;
+				--dashed-border: #00ffcc;
+				--quote-bg: #1a2238;
+				--quote-border: #ff007f;
+				--quote-text: #00ffcc;
+				--sidebar-bg: #121829;
+				--sidebar-boxshadow: rgba(255, 0, 127, 0.3);
+			}
 
-        isLoading = true; 
-        
-        const actualPageNum = pageKeys[keyIndex];
-        // 💡 सुधार: यूजर को भ्रम से बचाने के लिए "Tracking Part" लिख दिया है
-        statusDiv.textContent = "Checking Content Part " + actualPageNum + "...";
+			body {
+				margin: 0;
+				padding: 0;
+				background-color: var(--bg-color);
+				font-family:
+					-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+				color: var(--text-color);
+				transition:
+					background-color 0.3s,
+					color 0.3s;
+			}
 
-        let pageHtml = storyData.posts[actualPageNum];
+			/* ⚙️ साइड पैनल टॉगल बटन */
+			.sidebar-toggle-btn {
+				position: fixed;
+				top: 20px;
+				left: 20px;
+				z-index: 1001;
+				background: #007bff;
+				color: white;
+				border: none;
+				padding: 12px 15px;
+				border-radius: 50px;
+				font-size: 1.1rem;
+				font-weight: bold;
+				cursor: pointer;
+				box-shadow: 0 4px 10px rgba(0, 123, 255, 0.3);
+				transition: all 0.3s ease;
+				display: flex;
+				align-items: center;
+				gap: 5px;
+			}
+			.sidebar-toggle-btn:hover {
+				transform: scale(1.05);
+				background: #0056b3;
+			}
 
-        // 💡 जादुई सुधार: चेक करें कि क्या पेज सच में खाली है या सिर्फ खाली HTML टैग्स हैं
-        const isHtmlEmpty = !pageHtml || pageHtml.replace(/<[^>]*>/g, '').trim() === "";
+			/* 📂 नया साइड कंट्रोल बार (Sidenav) */
+			.side-control-bar {
+				position: fixed;
+				top: 0;
+				left: -320px; /* डिफ़ॉल्ट रूप से छिपा रहेगा */
+				width: 300px;
+				height: 100%;
+				background: var(--sidebar-bg);
+				box-shadow: 2px 0 15px var(--sidebar-boxshadow);
+				z-index: 1000;
+				padding: 80px 20px 20px 20px;
+				box-sizing: border-box;
+				transition: left 0.4s cubic-bezier(0.05, 0.74, 0.2, 1);
+				overflow-y: auto;
+				display: flex;
+				flex-direction: column;
+				gap: 20px;
+			}
 
-        if (!isHtmlEmpty) {
-            // अगर कंटेंट मौजूद है, तो उसे रेंडर करें
-            const pageDiv = document.createElement("div"); 
-            pageDiv.className = "story-page"; 
-            
-            // Image Path Fixer Logic
-            const tempDiv = document.createElement("div");
-            tempDiv.innerHTML = pageHtml;
-            
-            const images = tempDiv.getElementsByTagName("img");
-            for (let img of images) {
-                const currentSrc = img.getAttribute("src");
-                if (currentSrc) {
-                    if (currentSrc.includes("/temp/images/")) {
-                        img.setAttribute("src", currentSrc.replace(/\/temp\/images\//g, "./images/"));
-                    } else if (currentSrc.startsWith("images/")) {
-                        img.setAttribute("src", "./" + currentSrc);
-                    } else if (!currentSrc.startsWith("./images/") && !currentSrc.startsWith("http")) {
-                        const fileName = currentSrc.split('/').pop();
-                        img.setAttribute("src", "./images/" + fileName);
-                    }
-                }
-            }
+			/* जब साइडबार ओपन हो */
+			.side-control-bar.open {
+				left: 0;
+			}
 
-            pageDiv.innerHTML = tempDiv.innerHTML;
-            contentArea.appendChild(pageDiv);
-            
-            keyIndex++; 
-            statusDiv.textContent = "";
-            isLoading = false;
+			.control-group {
+				display: flex;
+				flex-direction: column;
+				gap: 8px;
+				border-bottom: 1px solid var(--border-color);
+				padding-bottom: 15px;
+			}
 
-            // कंटेंट लोड होने के बाद थोड़ा रुककर चेक करें कि अगला पेज खुद लोड करना है या यूजर स्क्रॉल करेगा
-            setTimeout(() => {
-                const docHeight = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight, document.body.offsetHeight);
-                if (docHeight <= window.innerHeight && keyIndex < pageKeys.length) { 
-                    loadNextPage(); 
-                }
-            }, 100);
+			.control-group label {
+				font-size: 0.85rem;
+				font-weight: bold;
+				text-transform: uppercase;
+				letter-spacing: 0.5px;
+				color: var(--text-color);
+				opacity: 0.8;
+			}
 
-        } else {
-            // 💡 मास्टरस्ट्रोक सुधार: अगर यह पेज/पार्ट खाली ("") मिला, तो बिना रुके 
-            // तुरंत अगले इंडेक्स पर बढ़ें और बिना अटके `loadNextPage` को दोबारा कॉल कर लें!
-            console.log(`Part ${actualPageNum} is empty, skipping to next...`);
-            keyIndex++;
-            isLoading = false;
-            
-            // बिना टाइम गंवाए तुरंत अगला पार्ट चेक करें
-            loadNextPage();
-        }
-    }
+			/* बटन और सिलेक्टर्स के कॉमन स्टाइल्स */
+			.btn-common,
+			.theme-select {
+				width: 100%;
+				padding: 10px;
+				font-size: 0.9rem;
+				font-weight: bold;
+				border-radius: 6px;
+				border: 1px solid var(--border-color);
+				background: var(--container-bg);
+				color: var(--text-color);
+				cursor: pointer;
+				transition: all 0.2s;
+				text-align: center;
+				box-sizing: border-box;
+			}
+			.btn-common:hover {
+				opacity: 0.9;
+				transform: translateY(-1px);
+			}
 
-    // 3. इनफिनिट स्क्रॉल डिटेक्शन
-    window.addEventListener("scroll", () => {
-        const totalHeight = document.documentElement.scrollHeight || document.body.scrollHeight;
-        const currentScroll = window.innerHeight + (window.scrollY || document.documentElement.scrollTop);
+			.browse-label {
+				background: #6c757d;
+				color: white;
+				border: none;
+			}
+			.load-all-btn {
+				background: #28a745;
+				color: white;
+				border: none;
+			}
+			.print-btn {
+				background: #e83e8c;
+				color: white;
+				border: none;
+			}
+			.language-toggle-btn {
+				background: #007bff;
+				color: white;
+				border: none;
+			}
+			#json-file-input {
+				display: none;
+			}
 
-        // बॉटम से 800px पहले ही ट्रिगर कर दें
-        if (currentScroll >= totalHeight - 800) { 
-            loadNextPage(); 
-        }
-    });
+			/* फॉन्ट साइज कंट्रोल्स */
+			.font-controls {
+				display: flex;
+				gap: 10px;
+			}
+			.font-btn {
+				flex: 1;
+				padding: 10px;
+				font-weight: bold;
+				font-size: 1rem;
+				background: var(--container-bg);
+				color: var(--text-color);
+				border: 1px solid var(--border-color);
+				border-radius: 6px;
+				cursor: pointer;
+			}
+			.font-btn:hover {
+				background: #007bff;
+				color: white;
+			}
 
-    // शुरुआत करें
-    loadStoryJson();
-</script>
-</body>
+			/* कस्टम कलर पिकर रॉ */
+			.color-picker-wrapper {
+				display: flex;
+				align-items: center;
+				gap: 10px;
+			}
+			.color-input {
+				width: 50px;
+				height: 35px;
+				border: none;
+				border-radius: 4px;
+				cursor: pointer;
+				background: none;
+			}
+
+			/* रीडर कंटेनर */
+			.reader-container {
+				width: 95%;
+				max-width: 800px;
+				margin: 6rem auto 2rem auto;
+				background: var(--container-bg);
+				padding: 2.5rem;
+				border-radius: 8px;
+				box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+				box-sizing: border-box;
+				position: relative;
+				transition: background-color 0.3s;
+			}
+
+			h1.story-title {
+				text-align: center;
+				margin-bottom: 2rem;
+				color: var(--title-color);
+				border-bottom: 2px solid var(--border-color);
+				padding-bottom: 1rem;
+				font-size: 1.8rem;
+				line-height: 1.4;
+			}
+
+			/* 💡 फॉन्ट साइज वेरिएबल के साथ रीड एरिया */
+			#content-area {
+				text-align: justify;
+				line-height: 1.8;
+				font-size: 1.1rem; /* डिफ़ॉल्ट */
+			}
+
+			.story-page {
+				padding: 2rem 0;
+				border-bottom: 1px dashed var(--dashed-border);
+				animation: fadeIn 0.5s ease-in;
+			}
+			.bbCodeBlock {
+				background: var(--quote-bg);
+				border-left: 3px solid var(--quote-border);
+				padding: 0.5rem 1rem;
+				margin: 1rem 0;
+				font-size: 0.95rem;
+				color: var(--quote-text);
+			}
+			.bbCodeBlock-title {
+				font-weight: bold;
+				font-size: 0.85rem;
+				margin-bottom: 0.3rem;
+			}
+			.story-page img {
+				max-width: 100%;
+				height: auto;
+				display: block;
+				margin: 1rem auto;
+				border-radius: 4px;
+				box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+			}
+			.loading-status {
+				text-align: center;
+				color: var(--text-color);
+				opacity: 0.6;
+				padding: 2rem;
+				font-style: italic;
+				font-weight: bold;
+			}
+
+			@keyframes fadeIn {
+				from {
+					opacity: 0;
+					transform: translateY(10px);
+				}
+				to {
+					opacity: 1;
+					transform: translateY(0);
+				}
+			}
+
+			/* 🚨 फिक्स्ड प्रिंट मीडिया रूल्स */
+			@media print {
+				@page {
+					size: A4;
+					margin: 20mm;
+				}
+				* {
+					-webkit-print-color-adjust: exact !important;
+					print-color-adjust: exact !important;
+				}
+				.side-control-bar,
+				.sidebar-toggle-btn,
+				.loading-status,
+				#status {
+					display: none !important;
+				}
+				body {
+					padding: 0 !important;
+					margin: 0 !important;
+				}
+				.reader-container {
+					margin: 0 !important;
+					border-radius: 0 !important;
+					box-shadow: none !important;
+					width: 100% !important;
+					max-width: 100% !important;
+				}
+				h1.story-title {
+					
+					border-bottom: 2px solid #000000 !important;
+				}
+				.story-page {
+					page-break-inside: avoid;
+					border-bottom: none !important;
+				}
+				.bbCodeBlock {
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<button class="sidebar-toggle-btn" onclick="toggleSidebar()">
+			⚙️ <span id="toggle-text">Menu</span>
+		</button>
+
+		<div class="side-control-bar" id="side-control-bar">
+			<div class="control-group">
+				<label>Story File</label>
+				<label for="json-file-input" class="btn-common browse-label"
+					>📂 Browse JSON</label
+				>
+				<input
+					type="file"
+					id="json-file-input"
+					accept=".json"
+					onchange="handleFileSelect(event)" />
+				<span
+					id="file-name-display"
+					style="
+						font-size: 0.8rem;
+						opacity: 0.7;
+						font-style: italic;
+						text-align: center;
+					"
+					>No file chosen</span
+				>
+			</div>
+
+			<div class="control-group">
+				<label>Loading Mode</label>
+				<button
+					class="btn-common load-all-btn"
+					id="load-all-btn"
+					onclick="loadWholeStory()">
+					⚡ Load All Parts
+				</button>
+			</div>
+
+			<div class="control-group">
+				<label>Font Size</label>
+				<div class="font-controls">
+					<button class="font-btn" onclick="adjustFontSize(-0.1)">A -</button>
+					<button class="font-btn" onclick="adjustFontSize(0.1)">A +</button>
+				</div>
+			</div>
+
+			<div class="control-group">
+				<label>Reading Theme</label>
+				<select
+					class="theme-select"
+					id="theme-select"
+					onchange="changeTheme(this.value)">
+					<option value="light">☀️ Light Theme</option>
+					<option value="dark">🌙 Dark Theme</option>
+					<option value="sepia">📜 Sepia Theme</option>
+					<option value="forest">🌲 Forest Green</option>
+					<option value="cyber">🌌 Cyberpunk Neon</option>
+				</select>
+			</div>
+
+			<div class="control-group">
+				<label>Custom Bg Color</label>
+				<div class="color-picker-wrapper">
+					<input
+						type="color"
+						id="bg-color-picker"
+						class="color-input"
+						value="#f4f4f9"
+						oninput="setCustomBg(this.value)" />
+					<span style="font-size: 0.85rem">Choose Custom Color</span>
+				</div>
+			</div>
+
+			<div class="control-group">
+				<label>Actions</label>
+				<button
+					class="btn-common language-toggle-btn"
+					id="lang-toggle-btn"
+					onclick="toggleLanguage()">
+					🌐 Switch to Hindi
+				</button>
+				<button
+					class="btn-common print-btn"
+					style="margin-top: 8px"
+					onclick="handlePrint()">
+					🖨️ Print Story
+				</button>
+			</div>
+		</div>
+
+		<div class="reader-container">
+			<h1 class="story-title" id="story-main-title">
+				Select or Load a Story...
+			</h1>
+			<div id="content-area">Story Content</div>
+			<div id="status" class="loading-status">Waiting for JSON data...</div>
+		</div>
+
+		<script>
+			let storyData = null;
+			let pageKeys = [];
+			let keyIndex = 0;
+			let isLoading = false;
+			let currentLang = "eng";
+			let currentFontSize = 1.1; // Default em size
+
+			const contentArea = document.getElementById("content-area");
+			const statusDiv = document.getElementById("status");
+			const titleElement = document.getElementById("story-main-title");
+			const langToggleBtn = document.getElementById("lang-toggle-btn");
+			const fileNameDisplay = document.getElementById("file-name-display");
+			const loadAllBtn = document.getElementById("load-all-btn");
+			const sideBar = document.getElementById("side-control-bar");
+			const toggleText = document.getElementById("toggle-text");
+
+			// 🔄 साइडबार को टॉगल (ओपन/क्लोज) करने का फंक्शन
+			if (contentArea) {
+				function toggleSidebar() {
+					sideBar.classList.toggle("open");
+					if (sideBar.classList.contains("open")) {
+						toggleText.textContent = "Close";
+					} else {
+						toggleText.textContent = "Menu";
+					}
+				}
+
+				// 🔍 फॉन्ट साइज एडजस्टमेंट फंक्शन
+				function adjustFontSize(action) {
+					currentFontSize += action;
+					// सेफ्टी लिमिट ताकि टेक्स्ट बहुत छोटा या अजीब बड़ा न हो जाए
+					if (currentFontSize < 0.8) currentFontSize = 0.8;
+					if (currentFontSize > 2.0) currentFontSize = 2.0;
+					contentArea.style.fontSize = currentFontSize + "em";
+				}
+
+				// 🎨 कस्टम बैकग्राउंड कलर हैंडलर
+				function setCustomBg(color) {
+					// अगर कस्टम कलर चुना गया है तो पहले एक्टिव थीम हटा दें
+					document.documentElement.removeAttribute("data-theme");
+					document.documentElement.style.setProperty("--bg-color", color);
+
+					// डार्क कलर डिटेक्ट करके ऑटोमैटिक टेक्स्ट कलर एडजस्ट करने का बेसिक लॉजिक
+					// (ताकि बैकग्राउंड ब्लैक करने पर टेक्स्ट गायब न हो जाए)
+					const r = parseInt(color.substr(1, 2), 16);
+					const g = parseInt(color.substr(3, 2), 16);
+					const b = parseInt(color.substr(5, 2), 16);
+					const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+
+					if (brightness < 128) {
+						document.documentElement.style.setProperty(
+							"--text-color",
+							"#ffffff",
+						);
+						document.documentElement.style.setProperty(
+							"--container-bg",
+							"#1e1e1e",
+						);
+						document.documentElement.style.setProperty(
+							"--title-color",
+							"#ffffff",
+						);
+					} else {
+						document.documentElement.style.setProperty(
+							"--text-color",
+							"#333333",
+						);
+						document.documentElement.style.setProperty(
+							"--container-bg",
+							"#ffffff",
+						);
+						document.documentElement.style.setProperty(
+							"--title-color",
+							"#111111",
+						);
+					}
+				}
+
+				// थीम सेलेक्टर चेंज हैंडलर
+				function changeTheme(themeName) {
+					// कस्टम स्टाइल रीसेट करें अगर कोई था
+					document.documentElement.style.removeProperty("--bg-color");
+					document.documentElement.style.removeProperty("--text-color");
+					document.documentElement.style.removeProperty("--container-bg");
+					document.documentElement.style.removeProperty("--title-color");
+
+					if (themeName === "light") {
+						document.documentElement.removeAttribute("data-theme");
+					} else {
+						document.documentElement.setAttribute("data-theme", themeName);
+					}
+				}
+
+				function handleFileSelect(event) {
+					const file = event.target.files[0];
+					if (!file) return;
+
+					fileNameDisplay.textContent = file.name;
+					statusDiv.textContent = "Reading selected file...";
+
+					const reader = new FileReader();
+					reader.onload = function (e) {
+						try {
+							const parsedData = JSON.parse(e.target.result);
+							initStoryRender(parsedData);
+						} catch (err) {
+							console.error(err);
+							statusDiv.textContent = "Error: Invalid JSON File structure.";
+						}
+					};
+					reader.readAsText(file);
+				}
+
+				async function loadStoryJson() {
+					try {
+						const response = await fetch("./story_data.json");
+						if (!response.ok) throw new Error("Local file not found");
+						const data = await response.json();
+						fileNameDisplay.textContent = "story_data.json (Auto-loaded)";
+						initStoryRender(data);
+					} catch (err) {
+						console.log(
+							"No local story_data.json found automatically. Ready for manual browse.",
+						);
+						statusDiv.textContent =
+							"Please browse and select your story_data.json file to start reading.";
+					}
+				}
+
+				function initStoryRender(data) {
+					contentArea.innerHTML = "";
+					storyData = data;
+					keyIndex = 0;
+					isLoading = false;
+					statusDiv.textContent = "";
+					if (loadAllBtn) loadAllBtn.style.display = "inline-block";
+
+					if (storyData && storyData.storyName) {
+						titleElement.textContent = storyData.storyName;
+						document.title = storyData.storyName + " - Offline Reader";
+					}
+
+					if (storyData && storyData.posts && storyData.posts.eng) {
+						pageKeys = Object.keys(storyData.posts.eng).sort(
+							(a, b) => Number(a) - Number(b),
+						);
+					}
+
+					loadNextPage();
+				}
+
+				function loadNextPage() {
+					if (isLoading || !storyData || pageKeys.length === 0) return;
+
+					if (keyIndex >= pageKeys.length) {
+						statusDiv.textContent = "— End of Story —";
+						if (loadAllBtn) loadAllBtn.style.display = "none";
+						return;
+					}
+
+					isLoading = true;
+					const actualPageNum = pageKeys[keyIndex];
+					statusDiv.textContent =
+						"Checking Content Part " + actualPageNum + "...";
+
+					let pageHtml = storyData.posts[currentLang]
+						? storyData.posts[currentLang][actualPageNum]
+						: "";
+					const isHtmlEmpty =
+						!pageHtml || pageHtml.replace(/<[^>]*>/g, "").trim() === "";
+
+					if (!isHtmlEmpty) {
+						const pageDiv = document.createElement("div");
+						pageDiv.className = "story-page";
+						pageDiv.setAttribute("data-page-num", actualPageNum);
+
+						const tempDiv = document.createElement("div");
+						tempDiv.innerHTML = pageHtml;
+
+						const images = tempDiv.getElementsByTagName("img");
+						for (let img of images) {
+							const currentSrc = img.getAttribute("src");
+							if (currentSrc) {
+								if (currentSrc.includes("/temp/images/")) {
+									img.setAttribute(
+										"src",
+										currentSrc.replace(/\/temp\/images\//g, "./images/"),
+									);
+								} else if (currentSrc.startsWith("images/")) {
+									img.setAttribute("src", "./" + currentSrc);
+								} else if (
+									!currentSrc.startsWith("./images/") &&
+									!currentSrc.startsWith("http")
+								) {
+									const fileName = currentSrc.split("/").pop();
+									img.setAttribute("src", "./images/" + fileName);
+								}
+							}
+						}
+
+						pageDiv.innerHTML = tempDiv.innerHTML;
+						contentArea.appendChild(pageDiv);
+
+						keyIndex++;
+						statusDiv.textContent = "";
+						isLoading = false;
+
+						setTimeout(() => {
+							const docHeight = Math.max(
+								document.body.scrollHeight,
+								document.documentElement.scrollHeight,
+								document.body.offsetHeight,
+							);
+							if (
+								docHeight <= window.innerHeight &&
+								keyIndex < pageKeys.length
+							) {
+								loadNextPage();
+							}
+						}, 100);
+					} else {
+						const pageDiv = document.createElement("div");
+						pageDiv.className = "story-page";
+						pageDiv.setAttribute("data-page-num", actualPageNum);
+						pageDiv.innerHTML = `<p style="color: #999; font-style: italic; text-align: center;">[Part ${actualPageNum} Content Not Available in ${currentLang === "eng" ? "English" : "Hindi"}]</p>`;
+						contentArea.appendChild(pageDiv);
+
+						keyIndex++;
+						isLoading = false;
+
+						setTimeout(() => {
+							loadNextPage();
+						}, 50);
+					}
+				}
+
+				function loadWholeStory() {
+					if (!storyData || pageKeys.length === 0) return;
+					statusDiv.textContent = "Loading all parts together...";
+					while (keyIndex < pageKeys.length) {
+						isLoading = false;
+						loadNextPage();
+					}
+					if (loadAllBtn) loadAllBtn.style.display = "none";
+				}
+
+				function handlePrint() {
+					if (keyIndex < pageKeys.length) {
+						const confirmPrint = confirm(
+							"पूरी कहानी अभी लोड नहीं हुई है। क्या आप प्रिंट करने से पहले सभी पार्ट्स लोड करना चाहते हैं?",
+						);
+						if (confirmPrint) {
+							loadWholeStory();
+							setTimeout(() => {
+								window.print();
+							}, 500);
+						} else {
+							window.print();
+						}
+					} else {
+						window.print();
+					}
+				}
+
+				function toggleLanguage() {
+					if (!storyData) return;
+
+					if (currentLang === "eng") {
+						currentLang = "hindi";
+						langToggleBtn.textContent = "🌐 Switch to English";
+						langToggleBtn.style.background = "#28a745";
+					} else {
+						currentLang = "eng";
+						langToggleBtn.textContent = "🌐 Switch to Hindi";
+						langToggleBtn.style.background = "#007bff";
+					}
+
+					const loadedPages = contentArea.getElementsByClassName("story-page");
+
+					for (let i = 0; i < loadedPages.length; i++) {
+						const pNum = loadedPages[i].getAttribute("data-page-num");
+						let newHtml = storyData.posts[currentLang]
+							? storyData.posts[currentLang][pNum]
+							: "";
+						const isHtmlEmpty =
+							!newHtml || newHtml.replace(/<[^>]*>/g, "").trim() === "";
+
+						if (!isHtmlEmpty) {
+							const tempDiv = document.createElement("div");
+							tempDiv.innerHTML = newHtml;
+							const images = tempDiv.getElementsByTagName("img");
+							for (let img of images) {
+								const currentSrc = img.getAttribute("src");
+								if (currentSrc) {
+									if (currentSrc.includes("/temp/images/")) {
+										img.setAttribute(
+											"src",
+											currentSrc.replace(/\/temp\/images\//g, "./images/"),
+										);
+									} else if (currentSrc.startsWith("images/")) {
+										img.setAttribute("src", "./" + currentSrc);
+									} else if (
+										!currentSrc.startsWith("./images/") &&
+										!currentSrc.startsWith("http")
+									) {
+										const fileName = currentSrc.split("/").pop();
+										img.setAttribute("src", "./images/" + fileName);
+									}
+								}
+							}
+							loadedPages[i].innerHTML = tempDiv.innerHTML;
+						} else {
+							loadedPages[i].innerHTML =
+								`<p style="color: #999; font-style: italic; text-align: center;">[Part ${pNum} Content Not Available in ${currentLang === "eng" ? "English" : "Hindi"}]</p>`;
+						}
+					}
+				}
+
+				window.addEventListener("scroll", () => {
+					const totalHeight =
+						document.documentElement.scrollHeight || document.body.scrollHeight;
+					const currentScroll =
+						window.innerHeight +
+						(window.scrollY || document.documentElement.scrollTop);
+					if (currentScroll >= totalHeight - 800) {
+						loadNextPage();
+					}
+				});
+
+				// बाहर कहीं क्लिक करने पर साइडबार अपने आप बंद हो जाए
+				document.addEventListener("click", (e) => {
+					if (
+						!sideBar.contains(e.target) &&
+						!e.target.classList.contains("sidebar-toggle-btn")
+					) {
+						sideBar.classList.remove("open");
+						toggleText.textContent = "Menu";
+					}
+				});
+
+				loadStoryJson();
+			}
+		</script>
+	</body>
 </html>

@@ -33,6 +33,12 @@ async function scrapeStoryWithImages(originalURL, authorName, baseFolder, progre
     const firstPage = startPage > 1 && startPage <= lastPage ? startPage : 1;
     const totalPagesToFetch = lastPage - firstPage + 1;
 
+    // 💡 बदलाव 1: storyPosts को यहाँ फंक्शन के अंदर रखें, ताकि हर बार नया स्क्रैप होने पर फ्रेश ऑब्जेक्ट बने।
+    const storyPosts = {
+        eng: {},
+        hindi: {}
+    };
+
     const stats = {
         matchedPosts: 0,
         downloadedImages: 0,
@@ -84,7 +90,6 @@ async function scrapeStoryWithImages(originalURL, authorName, baseFolder, progre
                 .text()
                 .trim();
 
-            // 💡 सुधार: अगर ऑथर मैच नहीं होता, तो पुरानी किसी पोस्ट का डेटा न भेजें (null भेजें)
             if (name !== authorName.trim()) {
                 sendProgress(progressCallback, i, firstPage, lastPage, totalPagesToFetch, null, title, stats);
                 continue;
@@ -107,14 +112,8 @@ async function scrapeStoryWithImages(originalURL, authorName, baseFolder, progre
                 });
             }
 
-            // 💡 मास्टरस्ट्रोक सुधार 1: 'currentPageHTML' को हटाकर 'currentPostHTML' किया
-            // और यहाँ इसे $content.html() से सीधे इनिशियलाइज़ कर दिया।
-            // इसका मतलब है कि अब इस वेरिएबल में सिर्फ और सिर्फ इसी एक सिंगल पोस्ट का HTML रहेगा!
-            // cheerio के body टैग के अंदर जो कुछ भी है, सिर्फ वही निकालेगा
             let currentPostHTML = $content('body').html() + "<hr/>";
 
-            // अब काउंटर को इमेज डाउनलोड करने से पहले ही बढ़ा दें, ताकि इमेज प्रोग्रेस के दौरान भी 
-            // फ्रंटएंड को सही 'matchedPosts' (यूनीक पोस्ट नंबर) मिल सके।
             stats.matchedPosts++;
 
             for (let index = 0; loadImages && index < imgs.length; index++) {
@@ -139,16 +138,13 @@ async function scrapeStoryWithImages(originalURL, authorName, baseFolder, progre
                             stats.totalImagesOnCurrentPost = imageProgress.totalImages;
                             stats.imagePercent = imageProgress.imagePercent;
                             
-                            // 💡 मास्टरस्ट्रोक सुधार 2: इमेज डाउनलोड होते समय सिर्फ इसी एक सिंगल पोस्ट का HTML लाइव जाएगा
                             sendProgress(progressCallback, i, firstPage, lastPage, totalPagesToFetch, currentPostHTML, title, stats);
                         }
                     );
 
                     if (localPath) {
                         stats.downloadedImages++;
-                        // DOM स्ट्रक्चर में इमेज पाथ अपडेट करें
                         $content(img).attr("src", `/temp/${localPath}`);
-                        // अपडेटेड HTML को वेरिएबल में दोबारा सेव करें ताकि अगला इमेज कॉलबैक सही पाथ भेजे
                         currentPostHTML = $content('body').html() + "<hr/>";
                     } else {
                         stats.skippedImages++;
@@ -167,20 +163,21 @@ async function scrapeStoryWithImages(originalURL, authorName, baseFolder, progre
                 $content(el).removeAttr("style");
             });
 
-            // स्टाइल हटाने के बाद फाइनल HTML री-फ्रेम करें
             currentPostHTML = $content('body').html() + "<hr/>";
+
+            // 💡 बदलाव 2: यहाँ कलेक्ट होते समय आपके नए स्ट्रक्चर के अनुसार सेव होगा।
+            // वर्तमान में स्क्रैप किया गया कन्टेंट 'eng' में जाएगा और 'hindi' अभी के लिए खाली रहेगा।
+            storyPosts.eng[stats.matchedPosts] = currentPostHTML;
+            storyPosts.hindi[stats.matchedPosts] = ""; 
             
             stats.pagePercent = Math.floor(((blockIndex + 1) / totalBlocks) * 100);
             
-            // इस सिंगल पोस्ट का काम पूरा होने पर फ्रंटएंड को फाइनल अपडेट भेजें
             sendProgress(progressCallback, i, firstPage, lastPage, totalPagesToFetch, currentPostHTML, title, stats);
             
-            // 🧹 मेमोरी क्लीनअप असिस्टेंस
             currentPostHTML = null;
         }
 
         stats.pagePercent = 100;
-        // पूरे पेज का लूप खत्म होने पर सिंक करने के लिए null भेजें ताकि कोई डुप्लीकेशन न हो
         sendProgress(progressCallback, i, firstPage, lastPage, totalPagesToFetch, null, title, stats);
     }
 
@@ -195,7 +192,14 @@ async function scrapeStoryWithImages(originalURL, authorName, baseFolder, progre
     }
 
     console.log("Scraping complete.");
-    return { title, stats };
+    
+    // 💡 बदलाव 3: यहाँ से 'posts' ऑब्जेक्ट के रूप में सुधरा हुआ 'storyPosts' रिटर्न करें
+    // ताकि जहाँ भी यह फाइल डिस्क पर सेव हो रही है, इसे पूरा सही फॉर्मेट मिले।
+    return { 
+        title, 
+        stats, 
+        posts: storyPosts 
+    };
 }
 
 function sendProgress(progressCallback, currentPage, firstPage, totalPages, totalPagesToFetch, html, title, stats) {
