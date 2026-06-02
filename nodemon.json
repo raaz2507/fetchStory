@@ -2,6 +2,6 @@
   "ignore": [
     "temp/*",
     "downloads/*",
-    "*.json"
+	"translator/outputs/*"
   ]
 }

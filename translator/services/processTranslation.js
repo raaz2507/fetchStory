@@ -4,7 +4,7 @@ const path = require("path");
 const TransliterationEngine = require("../engine/transliterate");
 const progressStore = require("../jobs/progressStore");
 
-async function processTranslation(storyData, jobId) {
+async function processTranslation(storyData, jobId, expectedChecksum) {
 	if (!storyData || typeof storyData !== "object") {
 		throw new Error("Story JSON data missing");
 	}
@@ -12,22 +12,40 @@ async function processTranslation(storyData, jobId) {
 	const story = normalizeStory(storyData);
 	const engPosts = story.posts.eng;
 	const postKeys = Object.keys(engPosts).sort((a, b) => Number(a) - Number(b));
+	const actualChecksum = getStoryChecksum(engPosts, postKeys);
 
 	if (!progressStore[jobId]) {
 		progressStore[jobId] = {};
 	}
 
+	validateChecksum(expectedChecksum, actualChecksum);
+
 	progressStore[jobId].current = 0;
 	progressStore[jobId].total = postKeys.length;
 	progressStore[jobId].done = false;
+	progressStore[jobId].checksum = actualChecksum;
+	progressStore[jobId].currentPage = null;
+	progressStore[jobId].message = "Translation started";
+
+	console.log(
+		`[translator:${jobId}] Translation started: ${postKeys.length} posts`
+	);
 
 	const allNotFoundWords = [];
 	let completedPages = 0;
 
 	for (const page of postKeys) {
+		progressStore[jobId].currentPage = page;
+		progressStore[jobId].message = `Translating post ${page}`;
+
 		if (story.posts.hindi[page]) {
 			completedPages++;
 			progressStore[jobId].current = completedPages;
+			progressStore[jobId].message = `Post ${page} already translated`;
+			console.log(
+				`[translator:${jobId}] ${completedPages}/${postKeys.length} post ${page} already translated`
+			);
+			await waitForProgressFlush();
 			continue;
 		}
 
@@ -37,8 +55,13 @@ async function processTranslation(storyData, jobId) {
 		story.posts.hindi[page] = hindiText;
 		completedPages++;
 		progressStore[jobId].current = completedPages;
+		progressStore[jobId].message = `Post ${page} translated`;
+		console.log(
+			`[translator:${jobId}] ${completedPages}/${postKeys.length} post ${page} translated`
+		);
 
 		allNotFoundWords.push(...engine.notFoundWords);
+		await waitForProgressFlush();
 	}
 
 	const outputsFolder = path.join(__dirname, "..", "outputs");
@@ -61,9 +84,16 @@ async function processTranslation(storyData, jobId) {
 
 	progressStore[jobId].translatedFile = result.translatedUrl;
 	progressStore[jobId].notFoundFile = result.notFoundUrl;
+	progressStore[jobId].message = "Translation complete";
 	progressStore[jobId].done = true;
 
+	console.log(`[translator:${jobId}] Translation complete`);
+
 	return result;
+}
+
+function waitForProgressFlush() {
+	return new Promise((resolve) => setImmediate(resolve));
 }
 
 function normalizeStory(storyData) {
@@ -89,6 +119,31 @@ function countNotFoundWords(words) {
 	return Object.fromEntries(
 		Object.entries(notFoundObj).sort((a, b) => b[1] - a[1])
 	);
+}
+
+function getStoryChecksum(engPosts, postKeys) {
+	return {
+		pages: postKeys.length,
+		chars: postKeys.reduce((sum, page) => {
+			return sum + String(engPosts[page] || "").length;
+		}, 0),
+	};
+}
+
+function validateChecksum(expectedChecksum, actualChecksum) {
+	if (!expectedChecksum) return;
+
+	const expectedPages = Number(expectedChecksum.pages);
+	const expectedChars = Number(expectedChecksum.chars);
+
+	if (
+		expectedPages !== actualChecksum.pages ||
+		expectedChars !== actualChecksum.chars
+	) {
+		throw new Error(
+			`Checksum mismatch: frontend ${expectedPages} pages/${expectedChars} chars, backend ${actualChecksum.pages} pages/${actualChecksum.chars} chars`
+		);
+	}
 }
 
 module.exports = processTranslation;

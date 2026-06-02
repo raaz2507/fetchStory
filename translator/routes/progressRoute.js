@@ -15,19 +15,33 @@ router.get(
 		res.setHeader("Cache-Control", "no-cache");
 
 		res.setHeader("Connection", "keep-alive");
+		if (typeof res.flushHeaders === "function") {
+			res.flushHeaders();
+		}
 
-		const interval = setInterval(() => {
+		const writeProgress = () => {
 			const progress = progressStore[jobId];
 
 			if (!progress) {
-				return;
+				res.write(
+					`data: ${JSON.stringify({
+						current: 0,
+						total: 0,
+						done: false,
+						message: "Waiting for translation job",
+					})}\n\n`
+				);
+				return false;
 			}
 
-			// IMPORTANT
 			res.write(`data: ${JSON.stringify(progress)}\n\n`);
+			return progress.done;
+		};
 
-			if (progress.done) {
-				res.write(`data: ${JSON.stringify(progress)}\n\n`);
+		writeProgress();
+
+		const interval = setInterval(() => {
+			if (writeProgress()) {
 
 				clearInterval(interval);
 

@@ -620,7 +620,8 @@
 					translateProgressBar.value = 0;
 					translatedDownloadBtn.classList.add("hide");
 					notFoundDownloadBtn.classList.add("hide");
-					translateStatus.textContent = "Starting translation...";
+					const checksum = getStoryChecksum(storyData);
+					translateStatus.textContent = `Checksum ready: ${checksum.pages} posts / ${checksum.chars} chars. Starting translation...`;
 
 					try {
 						const response = await fetch("/api/translator/translate-json", {
@@ -628,9 +629,9 @@
 							headers: {
 								"Content-Type": "application/json",
 							},
-							body: JSON.stringify({ storyData }),
+							body: JSON.stringify({ storyData, checksum }),
 						});
-						const result = await response.json();
+						const result = await response.json().catch(() => ({}));
 
 						if (!response.ok || !result.success) {
 							throw new Error(result.error || "Translation failed");
@@ -639,9 +640,29 @@
 						watchTranslationProgress(result.jobId);
 					} catch (err) {
 						console.error(err);
-						translateStatus.textContent = err.message || "Translation failed";
+						const message =
+							err && err.message && err.message !== "Failed to fetch"
+								? err.message
+								: "Translator API not reachable. Restart server and try again.";
+						translateStatus.textContent =
+							message;
 						translateBtn.disabled = false;
 					}
+				}
+
+				function getStoryChecksum(data) {
+					const engPosts =
+						data && data.posts && data.posts.eng ? data.posts.eng : {};
+					const keys = Object.keys(engPosts).sort(
+						(a, b) => Number(a) - Number(b),
+					);
+
+					return {
+						pages: keys.length,
+						chars: keys.reduce((sum, page) => {
+							return sum + String(engPosts[page] || "").length;
+						}, 0),
+					};
 				}
 
 				function watchTranslationProgress(jobId) {
@@ -652,11 +673,18 @@
 						const total = progress.total || 0;
 						const current = progress.current || 0;
 						const percent = total ? Math.floor((current / total) * 100) : 0;
+						const checksumText = progress.checksum
+							? ` (${progress.checksum.pages} posts / ${progress.checksum.chars} chars)`
+							: "";
+						const pageText = progress.currentPage
+							? ` - post ${progress.currentPage}`
+							: "";
+						const messageText = progress.message ? `${progress.message}. ` : "";
 
 						translateProgressBar.value = percent;
 						translateStatus.textContent = progress.error
 							? progress.error
-							: `Translated ${current}/${total}`;
+							: `${messageText}Translated ${current}/${total} (${percent}%)${pageText}${checksumText}`;
 
 						if (progress.done) {
 							source.close();
@@ -671,6 +699,7 @@
 								translatedDownloadBtn.href = progress.translatedFile;
 								translatedDownloadBtn.download = "translated_story.json";
 								translatedDownloadBtn.classList.remove("hide");
+								replaceLoadedStoryWithTranslated(progress.translatedFile);
 							}
 
 							if (progress.notFoundFile) {
@@ -686,6 +715,27 @@
 						translateBtn.disabled = false;
 						translateStatus.textContent = "Translation progress connection failed.";
 					};
+				}
+
+				async function replaceLoadedStoryWithTranslated(translatedFileUrl) {
+					try {
+						translateStatus.textContent =
+							"Translation complete. Loading translated JSON...";
+						const response = await fetch(translatedFileUrl);
+						if (!response.ok) {
+							throw new Error("Translated JSON load failed");
+						}
+
+						const translatedStory = await response.json();
+						fileNameDisplay.textContent = "translated_story.json (Loaded)";
+						initStoryRender(translatedStory);
+						translateStatus.textContent =
+							"Translation complete. Loaded translated JSON.";
+					} catch (err) {
+						console.error(err);
+						translateStatus.textContent =
+							err.message || "Translation complete, but translated JSON load failed.";
+					}
 				}
 
 				async function loadStoryJson() {
