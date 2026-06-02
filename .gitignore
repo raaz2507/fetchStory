@@ -1,5 +1,6 @@
 /temp/
 /downloads/
+/translator/outputs/
 /node_modules/
 
 package-lock.json
