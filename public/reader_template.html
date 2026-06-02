@@ -195,8 +195,27 @@
 				color: white;
 				border: none;
 			}
-			#json-file-input {
+			#jsonFile {
 				display: none;
+			}
+			.hide {
+				display: none !important;
+			}
+			.statusBox {
+				padding: 0.6rem;
+				background: var(--quote-bg);
+				border: 1px solid var(--border-color);
+				border-radius: 4px;
+				font-size: 0.85rem;
+				color: var(--text-color);
+			}
+			#progressBar {
+				width: 100%;
+				height: 12px;
+			}
+			.download-link {
+				display: block;
+				text-decoration: none;
 			}
 
 			/* फॉन्ट साइज कंट्रोल्स */
@@ -353,19 +372,19 @@
 		</style>
 	</head>
 	<body>
-		<button class="sidebar-toggle-btn" onclick="toggleSidebar()">
+		<button class="sidebar-toggle-btn" onclick="toggleSidebar(event)">
 			⚙️ <span id="toggle-text">Menu</span>
 		</button>
 
 		<div class="side-control-bar" id="side-control-bar">
 			<div class="control-group">
 				<label>Story File</label>
-				<label for="json-file-input" class="btn-common browse-label"
+				<label for="jsonFile" class="btn-common browse-label"
 					>📂 Browse JSON</label
 				>
 				<input
 					type="file"
-					id="json-file-input"
+					id="jsonFile"
 					accept=".json"
 					onchange="handleFileSelect(event)" />
 				<span
@@ -378,6 +397,23 @@
 					"
 					>No file chosen</span
 				>
+			</div>
+
+			<div class="control-group">
+				<label>Translate</label>
+				<button class="btn-common translate-btn" id="translateBtn">
+					Translate Story
+				</button>
+				<div class="statusBox">
+					<p id="status">Waiting...</p>
+				</div>
+				<progress id="progressBar" value="0" max="100"></progress>
+				<a id="downloadBtn" class="hide btn-common download-link" href="#">
+					Download Translated JSON
+				</a>
+				<a id="downloadNotFoundBtn" class="hide btn-common download-link" href="#">
+					Download Not Found Words
+				</a>
 			</div>
 
 			<div class="control-group">
@@ -447,7 +483,7 @@
 				Select or Load a Story...
 			</h1>
 			<div id="content-area">Story Content</div>
-			<div id="status" class="loading-status">Waiting for JSON data...</div>
+			<div id="reader-status" class="loading-status">Waiting for JSON data...</div>
 		</div>
 
 		<script>
@@ -459,17 +495,23 @@
 			let currentFontSize = 1.1; // Default em size
 
 			const contentArea = document.getElementById("content-area");
-			const statusDiv = document.getElementById("status");
+			const statusDiv = document.getElementById("reader-status");
 			const titleElement = document.getElementById("story-main-title");
 			const langToggleBtn = document.getElementById("lang-toggle-btn");
 			const fileNameDisplay = document.getElementById("file-name-display");
 			const loadAllBtn = document.getElementById("load-all-btn");
 			const sideBar = document.getElementById("side-control-bar");
 			const toggleText = document.getElementById("toggle-text");
+			const translateBtn = document.getElementById("translateBtn");
+			const translateStatus = document.getElementById("status");
+			const translateProgressBar = document.getElementById("progressBar");
+			const translatedDownloadBtn = document.getElementById("downloadBtn");
+			const notFoundDownloadBtn = document.getElementById("downloadNotFoundBtn");
 
 			// 🔄 साइडबार को टॉगल (ओपन/क्लोज) करने का फंक्शन
 			if (contentArea) {
-				function toggleSidebar() {
+				function toggleSidebar(event) {
+					if (event) event.stopPropagation();
 					sideBar.classList.toggle("open");
 					if (sideBar.classList.contains("open")) {
 						toggleText.textContent = "Close";
@@ -562,6 +604,88 @@
 						}
 					};
 					reader.readAsText(file);
+				}
+
+				if (translateBtn) {
+					translateBtn.addEventListener("click", translateCurrentStory);
+				}
+
+				async function translateCurrentStory() {
+					if (!storyData) {
+						translateStatus.textContent = "Please load a JSON file first.";
+						return;
+					}
+
+					translateBtn.disabled = true;
+					translateProgressBar.value = 0;
+					translatedDownloadBtn.classList.add("hide");
+					notFoundDownloadBtn.classList.add("hide");
+					translateStatus.textContent = "Starting translation...";
+
+					try {
+						const response = await fetch("/api/translator/translate-json", {
+							method: "POST",
+							headers: {
+								"Content-Type": "application/json",
+							},
+							body: JSON.stringify({ storyData }),
+						});
+						const result = await response.json();
+
+						if (!response.ok || !result.success) {
+							throw new Error(result.error || "Translation failed");
+						}
+
+						watchTranslationProgress(result.jobId);
+					} catch (err) {
+						console.error(err);
+						translateStatus.textContent = err.message || "Translation failed";
+						translateBtn.disabled = false;
+					}
+				}
+
+				function watchTranslationProgress(jobId) {
+					const source = new EventSource(`/api/translator/progress/${jobId}`);
+
+					source.onmessage = (event) => {
+						const progress = JSON.parse(event.data);
+						const total = progress.total || 0;
+						const current = progress.current || 0;
+						const percent = total ? Math.floor((current / total) * 100) : 0;
+
+						translateProgressBar.value = percent;
+						translateStatus.textContent = progress.error
+							? progress.error
+							: `Translated ${current}/${total}`;
+
+						if (progress.done) {
+							source.close();
+							translateBtn.disabled = false;
+
+							if (progress.error) return;
+
+							translateProgressBar.value = 100;
+							translateStatus.textContent = "Translation complete.";
+
+							if (progress.translatedFile) {
+								translatedDownloadBtn.href = progress.translatedFile;
+								translatedDownloadBtn.download = "translated_story.json";
+								translatedDownloadBtn.classList.remove("hide");
+							}
+
+							if (progress.notFoundFile) {
+								notFoundDownloadBtn.href = progress.notFoundFile;
+								notFoundDownloadBtn.download = "not_found_words.json";
+								notFoundDownloadBtn.classList.remove("hide");
+							}
+						}
+					};
+
+					source.onerror = () => {
+						source.close();
+						translateBtn.disabled = false;
+						translateStatus.textContent = "Translation progress connection failed.";
+					};
 				}
 
 				async function loadStoryJson() {
@@ -784,7 +908,7 @@
 				document.addEventListener("click", (e) => {
 					if (
 						!sideBar.contains(e.target) &&
-						!e.target.classList.contains("sidebar-toggle-btn")
+						!e.target.closest(".sidebar-toggle-btn")
 					) {
 						sideBar.classList.remove("open");
 						toggleText.textContent = "Menu";

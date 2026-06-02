@@ -30,6 +30,15 @@
         <div class="statsArea" id="statsText">
             Posts: 0 | Images: 0 downloaded, 0 skipped
         </div>
+        <div class="storyMetaArea" id="storyMetaArea">
+            <span>Last Fetch: -</span>
+            <span>Total Images: 0</span>
+            <span>Image Downloads: 0</span>
+            <span>Start: -</span>
+            <span>End: -</span>
+            <span>Duration: -</span>
+            <span>Last Page: 0</span>
+        </div>
         <div class="inputArea">
             <div>
                 <label for="urlInput">Input URL</label>
@@ -51,6 +60,10 @@
                 <input type="checkbox" id="loadImages" checked>
             </div>
             <div class="optionRow">
+                <label for="appendFromJson">Append JSON</label>
+                <input type="checkbox" id="appendFromJson">
+            </div>
+            <div class="optionRow">
                 <label for="themeSelect">Theme</label>
                 <select id="themeSelect">
                     <option value="light">Light</option>
@@ -59,10 +72,13 @@
             </div>
         </div>
         <div class="btnArea">
+            <input type="file" id="jsonUploadInput" accept=".json,application/json" hidden>
+            <button id="insertJsonBtn">Insert JSON File</button>
             <button id="getMeta" title="Get story title and total pages">Get Meta</button>
             <button id="fetchBtn">Fetch Story</button>
             <button id="cancelFetchBtn" disabled>Cancel Fetch</button>
             <button id="downloadBtn">Download</button>
+            <button id="openReaderBtn">Open Reader</button>
             <button id="loadFromCache">Load from Cache</button>
             <button id="clearCache">Clear Cache</button>
         </div>

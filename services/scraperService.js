@@ -1,34 +1,44 @@
 const axios = require("axios");
 const cheerio = require("cheerio");
 
-const { downloadImageWithHash } = require("./imageService");
+const {
+    getDomainConfig,
+    recordUnsupportedDomain,
+} = require("./domainService");
+const { downloadImageWithHash, resetImageCache } = require("./imageService");
 
 async function getStoryMeta(originalURL) {
     const baseURL = getValidatedBaseURL(originalURL);
+    const site = getSupportedSiteOrThrow(baseURL);
     const $firstPage = await fetchRequiredPage(baseURL);
 
     return {
-        title: $firstPage(".p-title-value").text().trim(),
-        totalPages: getLastPage($firstPage)
+        title: getTitle($firstPage, site.config),
+        totalPages: getLastPage($firstPage, site.config),
+        writerName: getWriterName($firstPage, site.config),
+        domain: site.domain
     };
 }
 
 async function scrapeStoryWithImages(originalURL, authorName, baseFolder, progressCallback, options = {}) {
-    if (!authorName || !authorName.trim()) {
-        throw createScrapeError("AUTHOR_MISSING", "Author name missing");
-    }
-
     const baseURL = getValidatedBaseURL(originalURL);
+    const site = getSupportedSiteOrThrow(baseURL);
     const startPage = options.startPage || 0;
     const endPage = options.endPage || 0;
     const loadImages = options.loadImages !== false;
     const signal = options.signal;
 
     throwIfCancelled(signal);
+    resetImageCache();
 
     const $firstPage = await fetchRequiredPage(baseURL, signal);
-    const title = $firstPage(".p-title-value").text().trim();
-    const detectedLastPage = getLastPage($firstPage);
+    const title = getTitle($firstPage, site.config);
+    const writerName = (authorName || "").trim() || getWriterName($firstPage, site.config);
+    if (!writerName) {
+        throw createScrapeError("AUTHOR_MISSING", "Author name missing");
+    }
+
+    const detectedLastPage = getLastPage($firstPage, site.config);
     const lastPage = endPage > 0 && endPage <= detectedLastPage ? endPage : detectedLastPage;
     const firstPage = startPage > 1 && startPage <= lastPage ? startPage : 1;
     const totalPagesToFetch = lastPage - firstPage + 1;
@@ -41,6 +51,7 @@ async function scrapeStoryWithImages(originalURL, authorName, baseFolder, progre
 
     const stats = {
         matchedPosts: 0,
+        totalImages: 0,
         downloadedImages: 0,
         skippedImages: 0,
         authorMatches: 0,
@@ -50,20 +61,69 @@ async function scrapeStoryWithImages(originalURL, authorName, baseFolder, progre
         imagePercent: 0,
         currentImageIndex: 0,
         totalImagesOnCurrentPost: 0,
-        imagesEnabled: loadImages
+        imagesEnabled: loadImages,
+        writerName
     };
 
-    for (let i = firstPage; i <= lastPage; i++) {
-        throwIfCancelled(signal);
+    const processPostImages = async (imgs, $content, pageURL, currentPage, getCurrentPostHTML) => {
+        const imageProgressValues = new Array(imgs.length).fill(0);
+        const imageConcurrency = Math.max(1, options.imageConcurrency || 4);
 
-        const pageURL = getPageURL(baseURL, i);
-        console.info(`Page loading: ${pageURL}`);
+        await runLimited(
+            imgs.map((img, index) => async () => {
+                throwIfCancelled(signal);
 
-        const $page = await fetchPage(pageURL, signal);
+                const imgUrl = $content(img).attr("src");
+                if (!imgUrl) return;
+
+                try {
+                    const imageResult = await downloadImageWithHash(
+                        imgUrl,
+                        baseFolder,
+                        index + 1,
+                        imgs.length,
+                        pageURL,
+                        signal,
+                        (imageProgress) => {
+                            imageProgressValues[index] = imageProgress.imagePercent || 0;
+                            stats.currentImageIndex = imageProgress.imageIndex;
+                            stats.totalImagesOnCurrentPost = imageProgress.totalImages;
+                            stats.imagePercent = getAveragePercent(imageProgressValues);
+
+                            sendProgress(progressCallback, currentPage, firstPage, lastPage, totalPagesToFetch, getCurrentPostHTML(), title, stats);
+                        }
+                    );
+                    const localPath = imageResult && imageResult.localPath;
+
+                    if (localPath) {
+                        if (imageResult.wasDownloaded) {
+                            stats.downloadedImages++;
+                        } else if (imageResult.wasDuplicate) {
+                            stats.skippedImages++;
+                        }
+                        $content(img).attr("src", `/temp/${localPath}`);
+                    } else {
+                        stats.skippedImages++;
+                    }
+                } catch (err) {
+                    if (err.code === "FETCH_CANCELLED" || err.name === "CanceledError") throw err;
+                    stats.skippedImages++;
+                    console.log(`Image skipped: ${imgUrl}`);
+                }
+
+                imageProgressValues[index] = 100;
+                stats.imagePercent = getAveragePercent(imageProgressValues);
+                sendProgress(progressCallback, currentPage, firstPage, lastPage, totalPagesToFetch, getCurrentPostHTML(), title, stats);
+            }),
+            imageConcurrency
+        );
+    };
+
+    const processFetchedPage = async (i, pageURL, $page) => {
         if (!$page) {
             stats.failedPages++;
             sendProgress(progressCallback, i, firstPage, lastPage, totalPagesToFetch, null, title, stats);
-            continue;
+            return;
         }
 
         stats.loadedPages++;
@@ -73,34 +133,23 @@ async function scrapeStoryWithImages(originalURL, authorName, baseFolder, progre
         stats.totalImagesOnCurrentPost = 0;
         console.info(`Page ${i} loaded, fetching content...`);
 
-        const blocks = $page(".message-inner").toArray();
-        if (blocks.length === 0) {
-            console.warn(`Page ${i}: No message blocks found`);
+        const articleBodies = findWriterPostBodies($page, writerName, site.config);
+        if (articleBodies.length === 0) {
+            console.warn(`Page ${i}: No message blocks found for ${writerName}`);
         }
 
-        const totalBlocks = Math.max(blocks.length, 1);
+        const totalBlocks = Math.max(articleBodies.length, 1);
         
-        for (let blockIndex = 0; blockIndex < blocks.length; blockIndex++) {
-            const el = blocks[blockIndex];
+        for (let blockIndex = 0; blockIndex < articleBodies.length; blockIndex++) {
+            const article = $page(articleBodies[blockIndex]);
             throwIfCancelled(signal);
             stats.pagePercent = Math.floor((blockIndex / totalBlocks) * 100);
 
-            const name = $page(el)
-                .find(".message-userDetails span[itemprop='name']")
-                .text()
-                .trim();
-
-            if (name !== authorName.trim()) {
-                sendProgress(progressCallback, i, firstPage, lastPage, totalPagesToFetch, null, title, stats);
-                continue;
-            }
             stats.authorMatches++;
-
-            const article = $page(el).find("article.message-body");
-            if (!article.length) continue;
 
             const $content = cheerio.load(article.html() || "");
             const imgs = $content("img").toArray();
+            stats.totalImages += imgs.length;
             stats.totalImagesOnCurrentPost = loadImages ? imgs.length : 0;
             stats.currentImageIndex = 0;
             stats.imagePercent = loadImages && imgs.length ? 0 : 100;
@@ -116,47 +165,15 @@ async function scrapeStoryWithImages(originalURL, authorName, baseFolder, progre
 
             stats.matchedPosts++;
 
-            for (let index = 0; loadImages && index < imgs.length; index++) {
-                throwIfCancelled(signal);
-                stats.currentImageIndex = index + 1;
-                stats.imagePercent = 0;
-
-                const img = imgs[index];
-                const imgUrl = $content(img).attr("src");
-                if (!imgUrl) continue;
-
-                try {
-                    const localPath = await downloadImageWithHash(
-                        imgUrl,
-                        baseFolder,
-                        index + 1,
-                        imgs.length,
-                        pageURL,
-                        signal,
-                        (imageProgress) => {
-                            stats.currentImageIndex = imageProgress.imageIndex;
-                            stats.totalImagesOnCurrentPost = imageProgress.totalImages;
-                            stats.imagePercent = imageProgress.imagePercent;
-                            
-                            sendProgress(progressCallback, i, firstPage, lastPage, totalPagesToFetch, currentPostHTML, title, stats);
-                        }
-                    );
-
-                    if (localPath) {
-                        stats.downloadedImages++;
-                        $content(img).attr("src", `/temp/${localPath}`);
-                        currentPostHTML = $content('body').html() + "<hr/>";
-                    } else {
-                        stats.skippedImages++;
-                    }
-                } catch (err) {
-                    if (err.code === "FETCH_CANCELLED" || err.name === "CanceledError") throw err;
-                    stats.skippedImages++;
-                    console.log(`Image skipped: ${imgUrl}`);
-                }
-
-                stats.imagePercent = 100;
-                sendProgress(progressCallback, i, firstPage, lastPage, totalPagesToFetch, currentPostHTML, title, stats);
+            if (loadImages && imgs.length) {
+                await processPostImages(
+                    imgs,
+                    $content,
+                    pageURL,
+                    i,
+                    () => $content('body').html() + "<hr/>"
+                );
+                currentPostHTML = $content('body').html() + "<hr/>";
             }
 
             $content("span").each((_, el) => {
@@ -168,7 +185,6 @@ async function scrapeStoryWithImages(originalURL, authorName, baseFolder, progre
             // 💡 बदलाव 2: यहाँ कलेक्ट होते समय आपके नए स्ट्रक्चर के अनुसार सेव होगा।
             // वर्तमान में स्क्रैप किया गया कन्टेंट 'eng' में जाएगा और 'hindi' अभी के लिए खाली रहेगा।
             storyPosts.eng[stats.matchedPosts] = currentPostHTML;
-            storyPosts.hindi[stats.matchedPosts] = ""; 
             
             stats.pagePercent = Math.floor(((blockIndex + 1) / totalBlocks) * 100);
             
@@ -179,6 +195,28 @@ async function scrapeStoryWithImages(originalURL, authorName, baseFolder, progre
 
         stats.pagePercent = 100;
         sendProgress(progressCallback, i, firstPage, lastPage, totalPagesToFetch, null, title, stats);
+    };
+
+    const pageNumbers = createPageNumbers(firstPage, lastPage);
+    const pageFetchConcurrency = Math.max(1, options.pageFetchConcurrency || 3);
+    const pageFetches = createLimitedTaskMap(
+        pageNumbers,
+        pageFetchConcurrency,
+        async (i) => {
+            throwIfCancelled(signal);
+
+            const pageURL = getPageURL(baseURL, i);
+            console.info(`Page loading: ${pageURL}`);
+
+            const $page = i === 1 ? $firstPage : await fetchPage(pageURL, signal);
+            return { pageURL, $page };
+        }
+    );
+
+    for (const i of pageNumbers) {
+        throwIfCancelled(signal);
+        const { pageURL, $page } = await pageFetches.get(i);
+        await processFetchedPage(i, pageURL, $page);
     }
 
     if (stats.loadedPages === 0) {
@@ -218,8 +256,10 @@ function sendProgress(progressCallback, currentPage, firstPage, totalPages, tota
         matchedPosts: stats.matchedPosts,
         downloadedImages: stats.downloadedImages,
         skippedImages: stats.skippedImages,
+        totalImages: stats.totalImages,
         failedPages: stats.failedPages,
         checksum: html ? html.length : undefined,
+        writerName: stats.writerName,
         title
     };
 
@@ -257,6 +297,114 @@ function getPageURL(baseURL, pageNumber) {
     return pageNumber === 1 ? baseURL : `${baseURL}page-${pageNumber}`;
 }
 
+function createPageNumbers(firstPage, lastPage) {
+    const pages = [];
+    for (let page = firstPage; page <= lastPage; page++) {
+        pages.push(page);
+    }
+    return pages;
+}
+
+function createLimitedTaskMap(items, concurrency, worker) {
+    const taskEntries = new Map();
+    const promises = new Map();
+    const queue = [...items];
+    let activeCount = 0;
+
+    const launchNext = () => {
+        while (activeCount < concurrency && queue.length) {
+            const item = queue.shift();
+            const task = taskEntries.get(item);
+
+            activeCount++;
+            Promise.resolve()
+                .then(() => worker(item))
+                .then(task.resolve, task.reject)
+                .finally(() => {
+                    activeCount--;
+                    launchNext();
+                });
+        }
+    };
+
+    items.forEach((item) => {
+        let entry;
+        const promise = new Promise((resolve, reject) => {
+            entry = { resolve, reject };
+        });
+        promise.catch(() => {});
+        taskEntries.set(item, entry);
+        promises.set(item, promise);
+    });
+
+    launchNext();
+    return promises;
+}
+
+async function runLimited(tasks, concurrency) {
+    let nextIndex = 0;
+    const workers = Array.from({ length: Math.min(concurrency, tasks.length) }, async () => {
+        while (nextIndex < tasks.length) {
+            const currentIndex = nextIndex++;
+            await tasks[currentIndex]();
+        }
+    });
+
+    await Promise.all(workers);
+}
+
+function getAveragePercent(values) {
+    if (!values.length) return 100;
+    const total = values.reduce((sum, value) => sum + value, 0);
+    return Math.floor(total / values.length);
+}
+
+function getSupportedSiteOrThrow(url) {
+    const site = getDomainConfig(url);
+    if (!site.config) {
+        recordUnsupportedDomain(url);
+        throw createScrapeError(
+            "DOMAIN_NOT_SUPPORTED",
+            `${site.domain} not supported yet`
+        );
+    }
+
+    return site;
+}
+
+function getTitle($, config) {
+    return $(config.titleSelector).first().text().trim();
+}
+
+function getWriterName($, config) {
+    return $(config.writerNameSelector).first().text().trim();
+}
+
+function findWriterPostBodies($, writerName, config) {
+    const directMatches = $(config.postBodySelector(writerName)).toArray();
+    if (directMatches.length) return directMatches;
+
+    const fallbackMatches = [];
+    $(".message-inner").each((_, el) => {
+        const name = $(el)
+            .find(config.fallbackWriterSelector)
+            .text()
+            .trim();
+
+        if (name !== writerName) return;
+
+        const article = $(el)
+            .find(config.fallbackPostSelector)
+            .first();
+
+        if (article.length) {
+            fallbackMatches.push(article[0]);
+        }
+    });
+
+    return fallbackMatches;
+}
+
 async function fetchRequiredPage(url, signal) {
     const $ = await fetchPage(url, signal);
     if (!$) throw createScrapeError("SITE_UNREACHABLE", "Site unreachable or page could not be loaded");
@@ -280,9 +428,9 @@ async function fetchPage(url, signal) {
     }
 }
 
-function getLastPage($) {
+function getLastPage($, config) {
     let max = 1;
-    $(".pageNav-main a").each((i, el) => {
+    $(config.lastPageSelector).each((i, el) => {
         const num = parseInt($(el).text().trim(), 10);
         if (!Number.isNaN(num)) max = Math.max(max, num);
     });

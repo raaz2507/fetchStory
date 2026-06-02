@@ -125,6 +125,23 @@ nav {
     text-align: center;
 }
 
+.storyMetaArea {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.35rem 0.75rem;
+    margin-top: 0.5rem;
+    color: var(--muted);
+    font-size: 0.82rem;
+}
+
+.storyMetaArea span {
+    padding: 0.2rem 0.45rem;
+    background: var(--field-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 3px;
+}
+
 .inputArea {
     display: grid;
     grid-template-columns: minmax(16rem, 1fr) minmax(12rem, 0.45fr) minmax(13rem, 0.35fr) minmax(8rem, 0.2fr);

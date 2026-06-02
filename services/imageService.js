@@ -4,6 +4,14 @@ const axios = require("axios");
 const crypto = require("crypto");
 
 const savedHashes = new Map();
+const savedUrls = new Map();
+const inFlightUrls = new Map();
+
+function resetImageCache() {
+    savedHashes.clear();
+    savedUrls.clear();
+    inFlightUrls.clear();
+}
 
 async function downloadImageWithHash(imgUrl, baseFolder, imageIndex, totalImages, baseURL, signal, progressCallback) {
     let finalUrl;
@@ -13,6 +21,36 @@ async function downloadImageWithHash(imgUrl, baseFolder, imageIndex, totalImages
         return null;
     }
 
+    if (savedUrls.has(finalUrl)) {
+        console.log(`\nDuplicate image URL skipped: ${finalUrl}`);
+        return {
+            localPath: savedUrls.get(finalUrl),
+            wasDuplicate: true,
+            wasDownloaded: false
+        };
+    }
+
+    if (inFlightUrls.has(finalUrl)) {
+        console.log(`\nWaiting for duplicate in-flight image: ${finalUrl}`);
+        const result = await inFlightUrls.get(finalUrl);
+        return result && result.localPath
+            ? { localPath: result.localPath, wasDuplicate: true, wasDownloaded: false }
+            : result;
+    }
+
+    const downloadPromise = downloadUniqueImage(finalUrl, baseFolder, imageIndex, totalImages, signal, progressCallback);
+    inFlightUrls.set(finalUrl, downloadPromise);
+
+    try {
+        const localPath = await downloadPromise;
+        if (localPath && localPath.localPath) savedUrls.set(finalUrl, localPath.localPath);
+        return localPath;
+    } finally {
+        inFlightUrls.delete(finalUrl);
+    }
+}
+
+async function downloadUniqueImage(finalUrl, baseFolder, imageIndex, totalImages, signal, progressCallback) {
     console.log(`\nImage [${imageIndex}/${totalImages}] starting: ${finalUrl}`);
 
     const imagesFolder = path.join(baseFolder, "images");
@@ -28,7 +66,7 @@ async function downloadImageWithHash(imgUrl, baseFolder, imageIndex, totalImages
     });
 
     const totalLength = Number(response.headers["content-length"] || 0);
-    const tempFilePath = path.join(imagesFolder, `download-${Date.now()}-${imageIndex}.tmp`);
+    const tempFilePath = path.join(imagesFolder, `download-${Date.now()}-${crypto.randomUUID()}-${imageIndex}.tmp`);
     const writer = fs.createWriteStream(tempFilePath);
     const hash = crypto.createHash("sha256");
     let downloadedLength = 0;
@@ -101,7 +139,13 @@ async function downloadImageWithHash(imgUrl, baseFolder, imageIndex, totalImages
     if (savedHashes.has(digest)) {
         fs.rmSync(tempFilePath, { force: true });
         console.log("\nDuplicate image skipped");
-        return savedHashes.get(digest);
+        const duplicatePath = savedHashes.get(digest);
+        savedUrls.set(finalUrl, duplicatePath);
+        return {
+            localPath: duplicatePath,
+            wasDuplicate: true,
+            wasDownloaded: false
+        };
     }
 
     const ext = path.extname(new URL(finalUrl).pathname) || ".jpg";
@@ -112,10 +156,15 @@ async function downloadImageWithHash(imgUrl, baseFolder, imageIndex, totalImages
 
     const relativePath = `images/${fileName}`;
     savedHashes.set(digest, relativePath);
+    savedUrls.set(finalUrl, relativePath);
 
     console.log(`\nSaved image as ${fileName}`);
 
-    return relativePath;
+    return {
+        localPath: relativePath,
+        wasDuplicate: false,
+        wasDownloaded: true
+    };
 }
 
 function shouldReportProgress(currentPercent, lastPercent, downloadedLength, totalLength) {
@@ -129,4 +178,4 @@ function createScrapeError(code, message) {
     return err;
 }
 
-module.exports = { downloadImageWithHash };
+module.exports = { downloadImageWithHash, resetImageCache };
