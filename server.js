@@ -3,6 +3,7 @@ const cors = require("cors");
 const path = require("path");
 
 const storyRoutes = require("./routes/storyRoutes");
+const readerRoutes = require("./routes/readerRoutes");
 const translatorRoutes = require("./translator/routes/translateRoute");
 const translatorProgressRoutes = require("./translator/routes/progressRoute");
 
@@ -13,6 +14,7 @@ app.use(express.json({ limit: "100mb" }));
 app.use(express.static("public"));
 
 app.use("/api/story", storyRoutes);
+app.use(readerRoutes);
 app.use("/api/translator", translatorRoutes);
 app.use("/api/translator", translatorProgressRoutes);
 

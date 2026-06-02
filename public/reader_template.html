@@ -217,6 +217,22 @@
 				display: block;
 				text-decoration: none;
 			}
+			.path-input {
+				width: 100%;
+				padding: 10px;
+				font-size: 0.85rem;
+				border-radius: 6px;
+				border: 1px solid var(--border-color);
+				background: var(--container-bg);
+				color: var(--text-color);
+				box-sizing: border-box;
+			}
+			.small-status {
+				font-size: 0.78rem;
+				opacity: 0.75;
+				text-align: center;
+				min-height: 1rem;
+			}
 
 			/* फॉन्ट साइज कंट्रोल्स */
 			.font-controls {
@@ -417,7 +433,23 @@
 			</div>
 
 			<div class="control-group">
+				<label>Image Folder Path</label>
+				<input
+					type="text"
+					id="imageFolderPath"
+					class="path-input"
+					placeholder="D:/stories/images" />
+				<button class="btn-common" id="setImageFolderBtn">
+					Set Image Path
+				</button>
+				<span id="image-folder-status" class="small-status"></span>
+			</div>
+
+			<div class="control-group">
 				<label>Loading Mode</label>
+				<div class="statusBox">
+					<p id="read-progress">Read: 0%</p>
+				</div>
 				<button
 					class="btn-common load-all-btn"
 					id="load-all-btn"
@@ -493,6 +525,9 @@
 			let isLoading = false;
 			let currentLang = "eng";
 			let currentFontSize = 1.1; // Default em size
+			const readerCacheDbName = "storyReaderDB";
+			const readerCacheStoreName = "cache";
+			const readerStoryCacheId = "lastStory";
 
 			const contentArea = document.getElementById("content-area");
 			const statusDiv = document.getElementById("reader-status");
@@ -507,6 +542,13 @@
 			const translateProgressBar = document.getElementById("progressBar");
 			const translatedDownloadBtn = document.getElementById("downloadBtn");
 			const notFoundDownloadBtn = document.getElementById("downloadNotFoundBtn");
+			const imageFolderPathInput = document.getElementById("imageFolderPath");
+			const setImageFolderBtn = document.getElementById("setImageFolderBtn");
+			const imageFolderStatus = document.getElementById("image-folder-status");
+			const readProgress = document.getElementById("read-progress");
+			let useLocalImageFolder = false;
+			let lastScrollSaveAt = 0;
+			let isRestoringScroll = false;
 
 			// 🔄 साइडबार को टॉगल (ओपन/क्लोज) करने का फंक्शन
 			if (contentArea) {
@@ -608,6 +650,52 @@
 
 				if (translateBtn) {
 					translateBtn.addEventListener("click", translateCurrentStory);
+				}
+
+				if (setImageFolderBtn) {
+					setImageFolderBtn.addEventListener("click", setImageFolderPath);
+				}
+
+				const savedImageFolderPath =
+					localStorage.getItem("readerImageFolderPath") || "";
+				if (imageFolderPathInput && savedImageFolderPath) {
+					imageFolderPathInput.value = savedImageFolderPath;
+					setImageFolderPath();
+				}
+
+				async function setImageFolderPath() {
+					const folderPath = imageFolderPathInput
+						? imageFolderPathInput.value.trim()
+						: "";
+
+					try {
+						const response = await fetch("/api/reader/image-folder", {
+							method: "POST",
+							headers: {
+								"Content-Type": "application/json",
+							},
+							body: JSON.stringify({ path: folderPath }),
+						});
+						const result = await response.json();
+
+						if (!response.ok || !result.success) {
+							throw new Error(result.error || "Image path not set");
+						}
+
+						useLocalImageFolder = Boolean(folderPath);
+						localStorage.setItem("readerImageFolderPath", result.path || folderPath);
+						imageFolderStatus.textContent = result.path
+							? `Image path set: ${result.path}`
+							: "Image path cleared";
+
+						if (storyData) {
+							initStoryRender(storyData);
+						}
+					} catch (err) {
+						console.error(err);
+						imageFolderStatus.textContent =
+							err.message || "Image path not set";
+					}
 				}
 
 				async function translateCurrentStory() {
@@ -738,7 +826,76 @@
 					}
 				}
 
+				function openReaderCacheDb() {
+					return new Promise((resolve, reject) => {
+						const request = indexedDB.open(readerCacheDbName, 1);
+
+						request.onupgradeneeded = () => {
+							const db = request.result;
+							if (!db.objectStoreNames.contains(readerCacheStoreName)) {
+								db.createObjectStore(readerCacheStoreName, { keyPath: "id" });
+							}
+						};
+
+						request.onsuccess = () => resolve(request.result);
+						request.onerror = () => reject(request.error);
+					});
+				}
+
+				async function saveReaderStoryCache(data) {
+					const db = await openReaderCacheDb();
+
+					return new Promise((resolve, reject) => {
+						const tx = db.transaction(readerCacheStoreName, "readwrite");
+						tx.objectStore(readerCacheStoreName).put({
+							id: readerStoryCacheId,
+							storyData: data,
+							savedAt: new Date().toISOString(),
+						});
+						tx.oncomplete = () => {
+							db.close();
+							resolve();
+						};
+						tx.onerror = () => {
+							db.close();
+							reject(tx.error);
+						};
+					});
+				}
+
+				async function loadReaderStoryCache() {
+					const db = await openReaderCacheDb();
+
+					return new Promise((resolve, reject) => {
+						const tx = db.transaction(readerCacheStoreName, "readonly");
+						const request = tx
+							.objectStore(readerCacheStoreName)
+							.get(readerStoryCacheId);
+
+						request.onsuccess = () => {
+							resolve(request.result ? request.result.storyData : null);
+						};
+						request.onerror = () => reject(request.error);
+						tx.oncomplete = () => db.close();
+						tx.onerror = () => {
+							db.close();
+							reject(tx.error);
+						};
+					});
+				}
+
 				async function loadStoryJson() {
+					try {
+						const cachedStory = await loadReaderStoryCache();
+						if (cachedStory) {
+							fileNameDisplay.textContent = "Cached story JSON (Auto-loaded)";
+							initStoryRender(cachedStory, { saveToCache: false });
+							return;
+						}
+					} catch (err) {
+						console.warn("Reader cache load failed:", err.message);
+					}
+
 					try {
 						const response = await fetch("./story_data.json");
 						if (!response.ok) throw new Error("Local file not found");
@@ -754,7 +911,7 @@
 					}
 				}
 
-				function initStoryRender(data) {
+				function initStoryRender(data, options = {}) {
 					contentArea.innerHTML = "";
 					storyData = data;
 					keyIndex = 0;
@@ -773,7 +930,140 @@
 						);
 					}
 
+					if (options.saveToCache !== false) {
+						saveReaderStoryCache(storyData).catch((err) => {
+							console.warn("Reader cache save failed:", err.message);
+						});
+					}
+
 					loadNextPage();
+					restoreReaderScrollSoon();
+				}
+
+				function getReaderScrollKey() {
+					if (!storyData) return "";
+
+					const posts = storyData.posts && storyData.posts.eng
+						? storyData.posts.eng
+						: {};
+					const identity = [
+						storyData.url || "",
+						storyData.storyName || "",
+						storyData["writer-name"] || "",
+						Object.keys(posts).length,
+					].join("|");
+
+					return `readerScroll:${identity}`;
+				}
+
+				function getReadPercent() {
+					const scrollTop = window.scrollY || document.documentElement.scrollTop || 0;
+					const scrollable = Math.max(
+						0,
+						document.documentElement.scrollHeight - window.innerHeight,
+					);
+
+					return scrollable ? Math.min(100, Math.round((scrollTop / scrollable) * 100)) : 0;
+				}
+
+				function updateReadProgress() {
+					if (!readProgress) return;
+					readProgress.textContent = `Read: ${getReadPercent()}%`;
+				}
+
+				function saveReaderScroll(force = false) {
+					if (!storyData || isRestoringScroll) return;
+
+					const now = Date.now();
+					if (!force && now - lastScrollSaveAt < 3000) return;
+
+					const key = getReaderScrollKey();
+					if (!key) return;
+
+					lastScrollSaveAt = now;
+					localStorage.setItem(
+						key,
+						JSON.stringify({
+							y: Math.max(0, window.scrollY || document.documentElement.scrollTop || 0),
+							percent: getReadPercent(),
+							updatedAt: new Date().toISOString(),
+						}),
+					);
+				}
+
+				async function restoreReaderScrollSoon() {
+					const key = getReaderScrollKey();
+					if (!key) return;
+
+					let saved = null;
+					try {
+						saved = JSON.parse(localStorage.getItem(key) || "null");
+					} catch (err) {
+						saved = null;
+					}
+
+					if (!saved || !Number.isFinite(Number(saved.y)) || Number(saved.y) <= 0) {
+						updateReadProgress();
+						return;
+					}
+
+					isRestoringScroll = true;
+					const targetY = Number(saved.y);
+
+					for (let attempt = 0; attempt < 30; attempt++) {
+						const scrollableHeight = document.documentElement.scrollHeight;
+						if (scrollableHeight >= targetY + window.innerHeight || keyIndex >= pageKeys.length) {
+							break;
+						}
+						isLoading = false;
+						loadNextPage();
+						await new Promise((resolve) => setTimeout(resolve, 80));
+					}
+
+					setTimeout(() => {
+						window.scrollTo({ top: targetY, behavior: "auto" });
+						updateReadProgress();
+						isRestoringScroll = false;
+					}, 120);
+				}
+
+				function normalizeStoryImages(container) {
+					const images = container.getElementsByTagName("img");
+
+					for (let img of images) {
+						const currentSrc = img.getAttribute("src");
+						if (!currentSrc) continue;
+
+						const fileName = getImageFileName(currentSrc);
+
+						if (useLocalImageFolder && fileName) {
+							img.setAttribute(
+								"src",
+								`/local-images/${encodeURIComponent(fileName)}`,
+							);
+							continue;
+						}
+
+						if (currentSrc.includes("/temp/images/")) {
+							img.setAttribute(
+								"src",
+								currentSrc.replace(/\/temp\/images\//g, "./images/"),
+							);
+						} else if (currentSrc.startsWith("images/")) {
+							img.setAttribute("src", "./" + currentSrc);
+						} else if (
+							!currentSrc.startsWith("./images/") &&
+							!currentSrc.startsWith("http")
+						) {
+							img.setAttribute("src", "./images/" + fileName);
+						}
+					}
+				}
+
+				function getImageFileName(src) {
+					const cleanSrc = String(src).split("?")[0].split("#")[0];
+					const parts = cleanSrc.replace(/\\/g, "/").split("/");
+					return parts[parts.length - 1] || "";
 				}
 
 				function loadNextPage() {
@@ -804,26 +1094,7 @@
 						const tempDiv = document.createElement("div");
 						tempDiv.innerHTML = pageHtml;
 
-						const images = tempDiv.getElementsByTagName("img");
-						for (let img of images) {
-							const currentSrc = img.getAttribute("src");
-							if (currentSrc) {
-								if (currentSrc.includes("/temp/images/")) {
-									img.setAttribute(
-										"src",
-										currentSrc.replace(/\/temp\/images\//g, "./images/"),
-									);
-								} else if (currentSrc.startsWith("images/")) {
-									img.setAttribute("src", "./" + currentSrc);
-								} else if (
-									!currentSrc.startsWith("./images/") &&
-									!currentSrc.startsWith("http")
-								) {
-									const fileName = currentSrc.split("/").pop();
-									img.setAttribute("src", "./images/" + fileName);
-								}
-							}
-						}
+						normalizeStoryImages(tempDiv);
 
 						pageDiv.innerHTML = tempDiv.innerHTML;
 						contentArea.appendChild(pageDiv);
@@ -915,26 +1186,7 @@
 						if (!isHtmlEmpty) {
 							const tempDiv = document.createElement("div");
 							tempDiv.innerHTML = newHtml;
-							const images = tempDiv.getElementsByTagName("img");
-							for (let img of images) {
-								const currentSrc = img.getAttribute("src");
-								if (currentSrc) {
-									if (currentSrc.includes("/temp/images/")) {
-										img.setAttribute(
-											"src",
-											currentSrc.replace(/\/temp\/images\//g, "./images/"),
-										);
-									} else if (currentSrc.startsWith("images/")) {
-										img.setAttribute("src", "./" + currentSrc);
-									} else if (
-										!currentSrc.startsWith("./images/") &&
-										!currentSrc.startsWith("http")
-									) {
-										const fileName = currentSrc.split("/").pop();
-										img.setAttribute("src", "./images/" + fileName);
-									}
-								}
-							}
+							normalizeStoryImages(tempDiv);
 							loadedPages[i].innerHTML = tempDiv.innerHTML;
 						} else {
 							loadedPages[i].innerHTML =
@@ -944,6 +1196,9 @@
 				}
 
 				window.addEventListener("scroll", () => {
+					updateReadProgress();
+					saveReaderScroll();
+
 					const totalHeight =
 						document.documentElement.scrollHeight || document.body.scrollHeight;
 					const currentScroll =
@@ -952,6 +1207,10 @@
 					if (currentScroll >= totalHeight - 800) {
 						loadNextPage();
 					}
+				});
+
+				window.addEventListener("beforeunload", () => {
+					saveReaderScroll(true);
 				});
 
 				// बाहर कहीं क्लिक करने पर साइडबार अपने आप बंद हो जाए

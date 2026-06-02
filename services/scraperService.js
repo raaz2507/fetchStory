@@ -77,8 +77,10 @@ async function scrapeStoryWithImages(originalURL, authorName, baseFolder, progre
                 if (!imgUrl) return;
 
                 try {
+                    const originalImageUrl = new URL(imgUrl, pageURL).href;
+                    $content(img).attr("data-original-src", originalImageUrl);
                     const imageResult = await downloadImageWithHash(
-                        imgUrl,
+                        originalImageUrl,
                         baseFolder,
                         index + 1,
                         imgs.length,
@@ -286,14 +288,24 @@ function getValidatedBaseURL(url) {
         throw createScrapeError("URL_INVALID", "Only http and https URLs are allowed");
     }
 
-    return getBaseURL(parsed.href);
+    return getBaseURL(parsed.href, parsed.hostname.replace(/^www\./, "").toLowerCase());
 }
 
-function getBaseURL(url) {
+function getBaseURL(url, domain) {
+    if (domain === "xossipy.com") {
+        return url.replace(/-page-\d+\.html$/i, ".html");
+    }
+
     return url.replace(/\/page-\d+\/?$/, "").replace(/\/?$/, "/");
 }
 
 function getPageURL(baseURL, pageNumber) {
+    if (baseURL.includes("xossipy.com/") && /\.html$/i.test(baseURL)) {
+        return pageNumber === 1
+            ? baseURL
+            : baseURL.replace(/\.html$/i, `-page-${pageNumber}.html`);
+    }
+
     return pageNumber === 1 ? baseURL : `${baseURL}page-${pageNumber}`;
 }
 

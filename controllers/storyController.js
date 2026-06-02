@@ -8,6 +8,7 @@ const {
     scrapeStoryWithImages,
 } = require("../services/scraperService");
 const { createZip } = require("../services/exportService");
+const { processStoryJsonImages } = require("../services/jsonImageProcessorService");
 
 exports.downloadStory = async (req, res) => {
     try {
@@ -55,7 +56,7 @@ exports.downloadStory = async (req, res) => {
         let originalJsonContent = fs.readFileSync(sourceJsonPath, "utf8");
         originalJsonContent = originalJsonContent.replace(
             /\/temp\/images\//g,
-            "./images/",
+            "images/",
         );
         fs.writeFileSync(
             path.join(baseFolder, "story_data.json"),
@@ -133,6 +134,36 @@ exports.uploadStoryJson = async (req, res) => {
     } catch (err) {
         console.error("JSON upload error:", err);
         res.status(500).json({ error: "JSON upload failed" });
+    }
+};
+
+exports.processUploadedStoryImages = async (req, res) => {
+    try {
+        const tempFolder = path.join(__dirname, "..", "temp");
+        const imagesPath = path.join(tempFolder, "images");
+        const jsonFilePath = path.join(tempFolder, "story_data.json");
+
+        if (!fs.existsSync(jsonFilePath)) {
+            return res.status(404).json({ error: "Upload JSON first" });
+        }
+
+        fs.mkdirSync(imagesPath, { recursive: true });
+
+        const storyData = normalizeStoryData(
+            JSON.parse(fs.readFileSync(jsonFilePath, "utf8"))
+        );
+        const result = await processStoryJsonImages(storyData, tempFolder);
+
+        fs.writeFileSync(jsonFilePath, JSON.stringify(result.storyData, null, 2));
+
+        res.json({
+            ok: true,
+            storyData: result.storyData,
+            stats: result.stats,
+        });
+    } catch (err) {
+        console.error("Uploaded JSON image processing error:", err);
+        res.status(500).json({ error: "Image processing failed: " + err.message });
     }
 };
 

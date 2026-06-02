@@ -8,28 +8,96 @@ const imageProgressBar = document.getElementById("imageProgressBar");
 const imageProgressText = document.getElementById("imageProgressText");
 const statsText = document.getElementById("statsText");
 const storyMetaArea = document.getElementById("storyMetaArea");
+const statusHeader = document.querySelector(".statusHeader");
+const controlPanel = document.getElementById("controlPanel");
+const controlPanelToggle = document.getElementById("controlPanelToggle");
+const summaryPanel = document.getElementById("summaryPanel");
+const summaryPanelToggle = document.getElementById("summaryPanelToggle");
 const fetchBtn = document.getElementById("fetchBtn");
 const cancelFetchBtn = document.getElementById("cancelFetchBtn");
 const insertJsonBtn = document.getElementById("insertJsonBtn");
 const jsonUploadInput = document.getElementById("jsonUploadInput");
+const processUploadedImagesBtn = document.getElementById("processUploadedImagesBtn");
 const cacheKey = "storyScraper:lastStory";
+const idbName = "storyScraperDB";
+const idbStoreName = "cache";
 const themeKey = "storyScraper:theme";
 const themeSelect = document.getElementById("themeSelect");
 
 let activeEventSource = null;
 let currentStoryMeta = {};
+let currentStoryData = null;
 let fetchStartedAt = null;
+let lastScrollY = window.scrollY || 0;
+let accumulatedScrollUp = 0;
+let tickingHeaderVisibility = false;
 
 // --- Scroll & Pagination States ---
 let currentPage = 1;
 let isLoadingPages = false;
 let hasMorePages = true;
+let allowTempPageLoading = false;
 
 applyTheme(localStorage.getItem(themeKey) || "light");
+restoreFromCache(false);
 
 themeSelect.addEventListener("change", () => {
     applyTheme(themeSelect.value);
 });
+
+if (controlPanelToggle && controlPanel) {
+    controlPanelToggle.addEventListener("click", (event) => {
+        event.stopPropagation();
+        toggleControlPanel();
+    });
+
+    controlPanel.addEventListener("click", (event) => {
+        event.stopPropagation();
+    });
+
+    document.addEventListener("click", () => {
+        closeControlPanel();
+    });
+
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+            closeControlPanel();
+        }
+    });
+
+    window.addEventListener("resize", () => {
+        if (window.innerWidth > 980) {
+            closeControlPanel();
+        }
+    });
+}
+
+if (summaryPanelToggle && summaryPanel) {
+    summaryPanelToggle.addEventListener("click", (event) => {
+        event.stopPropagation();
+        toggleSummaryPanel();
+    });
+
+    summaryPanel.addEventListener("click", (event) => {
+        event.stopPropagation();
+    });
+
+    document.addEventListener("click", () => {
+        closeSummaryPanel();
+    });
+
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+            closeSummaryPanel();
+        }
+    });
+
+    window.addEventListener("resize", () => {
+        if (window.innerWidth > 980) {
+            closeSummaryPanel();
+        }
+    });
+}
 
 insertJsonBtn.addEventListener("click", () => {
     jsonUploadInput.click();
@@ -67,6 +135,33 @@ jsonUploadInput.addEventListener("change", async () => {
     }
 });
 
+processUploadedImagesBtn.addEventListener("click", async () => {
+    try {
+        progressText.textContent = "Processing JSON images...";
+        processUploadedImagesBtn.disabled = true;
+
+        const response = await fetch("/api/story/process-uploaded-images", {
+            method: "POST",
+        });
+        const result = await response.json();
+
+        if (!response.ok || result.error) {
+            throw new Error(result.error || "Image processing failed");
+        }
+
+        applyStoryData(result.storyData);
+        const stats = result.stats || {};
+        progressText.textContent =
+            `Images processed: ${stats.downloadedImages || 0} downloaded, ${stats.skippedImages || 0} skipped`;
+        saveCache();
+    } catch (err) {
+        console.error(err);
+        progressText.textContent = err.message || "Image processing failed";
+    } finally {
+        processUploadedImagesBtn.disabled = false;
+    }
+});
+
 document.getElementById("getMeta").addEventListener("click", async () => {
     const url = document.getElementById("urlInput").value.trim();
 
@@ -100,7 +195,7 @@ document.getElementById("getMeta").addEventListener("click", async () => {
 
 // --- Function to Load Single Page via API on Scroll ---
 async function loadNextPage() {
-    if (isLoadingPages || !hasMorePages) return;
+    if (!allowTempPageLoading || isLoadingPages || !hasMorePages) return;
     isLoadingPages = true;
 
     try {
@@ -156,6 +251,7 @@ async function loadNextPage() {
 
 // --- स्क्रोल लिसनर ---
 window.addEventListener('scroll', () => {
+    updateStatusHeaderVisibility();
     if (activeEventSource) return; // अगर लाइव स्ट्रीमिंग चल रही है तो स्क्रॉल लोड न करें
 
     const totalHeight = document.documentElement.scrollHeight;
@@ -166,7 +262,104 @@ window.addEventListener('scroll', () => {
     }
 });
 
+function updateStatusHeaderVisibility() {
+    if ((!statusHeader && !summaryPanel) || tickingHeaderVisibility) return;
+
+    tickingHeaderVisibility = true;
+    window.requestAnimationFrame(() => {
+        const currentY = Math.max(0, window.scrollY || 0);
+        const delta = currentY - lastScrollY;
+
+        if (currentY < 24) {
+            showScrollSensitivePanels();
+            accumulatedScrollUp = 0;
+        } else if (delta > 8) {
+            hideScrollSensitivePanels();
+            accumulatedScrollUp = 0;
+        } else if (delta < 0) {
+            accumulatedScrollUp += Math.abs(delta);
+            if (accumulatedScrollUp >= 12) {
+                showScrollSensitivePanels();
+            }
+        }
+
+        lastScrollY = currentY;
+        tickingHeaderVisibility = false;
+    });
+}
+
+function hideScrollSensitivePanels() {
+    if (statusHeader) {
+        statusHeader.classList.add("is-hidden");
+        statusHeader.classList.remove("is-visible");
+    }
+
+    if (summaryPanel) {
+        summaryPanel.classList.add("is-scroll-hidden");
+        summaryPanel.classList.remove("is-scroll-visible");
+    }
+}
+
+function showScrollSensitivePanels() {
+    if (statusHeader) {
+        statusHeader.classList.remove("is-hidden");
+        statusHeader.classList.add("is-visible");
+    }
+
+    if (summaryPanel) {
+        summaryPanel.classList.remove("is-scroll-hidden");
+        summaryPanel.classList.add("is-scroll-visible");
+    }
+}
+
+function toggleControlPanel() {
+    if (!controlPanel) return;
+
+    const isOpen = controlPanel.classList.toggle("is-open");
+    if (isOpen) {
+        closeSummaryPanel();
+    }
+    if (controlPanelToggle) {
+        controlPanelToggle.setAttribute("aria-expanded", String(isOpen));
+        controlPanelToggle.textContent = isOpen ? "Close" : "Controls";
+    }
+}
+
+function closeControlPanel() {
+    if (!controlPanel || !controlPanel.classList.contains("is-open")) return;
+
+    controlPanel.classList.remove("is-open");
+    if (controlPanelToggle) {
+        controlPanelToggle.setAttribute("aria-expanded", "false");
+        controlPanelToggle.textContent = "Controls";
+    }
+}
+
+function toggleSummaryPanel() {
+    if (!summaryPanel) return;
+
+    const isOpen = summaryPanel.classList.toggle("is-open");
+    if (isOpen) {
+        closeControlPanel();
+    }
+    if (summaryPanelToggle) {
+        summaryPanelToggle.setAttribute("aria-expanded", String(isOpen));
+        summaryPanelToggle.textContent = isOpen ? "Close" : "Status";
+    }
+}
+
+function closeSummaryPanel() {
+    if (!summaryPanel || !summaryPanel.classList.contains("is-open")) return;
+
+    summaryPanel.classList.remove("is-open");
+    if (summaryPanelToggle) {
+        summaryPanelToggle.setAttribute("aria-expanded", "false");
+        summaryPanelToggle.textContent = "Status";
+    }
+}
+
 fetchBtn.addEventListener("click", () => {
+    allowTempPageLoading = true;
     const appendFromJson = document.getElementById("appendFromJson").checked;
     if (!appendFromJson) {
         contentDiv.innerHTML = "";
@@ -233,6 +426,7 @@ fetchBtn.addEventListener("click", () => {
 
         if (data.done) {
             closeActiveStream();
+            allowTempPageLoading = true;
             progressText.textContent = "Fetch complete";
             progressBar.value = 100;
             pageProgressBar.value = 100;
@@ -247,7 +441,8 @@ fetchBtn.addEventListener("click", () => {
             hasMorePages = totalLoadedPages > 0;
 
             if (data.storyData) {
-                currentStoryMeta = normalizeStoryData(data.storyData);
+                currentStoryData = normalizeStoryData(data.storyData);
+                currentStoryMeta = currentStoryData;
             } else {
                 finishCurrentStoryMeta();
             }
@@ -328,22 +523,45 @@ cancelFetchBtn.addEventListener("click", () => {
 });
 
 document.getElementById("loadFromCache").addEventListener("click", () => {
-    const cached = localStorage.getItem(cacheKey);
+    restoreFromCache(true);
+});
 
-    if (!cached) {
-        progressText.textContent = "No cache found";
+async function restoreFromCache(showMissingMessage) {
+    let data = null;
+
+    try {
+        data = await loadBrowserCache();
+    } catch (err) {
+        console.warn("IndexedDB cache load failed:", err.message);
+        if (showMissingMessage) {
+            progressText.textContent = "Cache load failed";
+        }
+        return;
+    }
+
+    if (!data) {
+        if (showMissingMessage) {
+            progressText.textContent = "No cache found";
+        }
         return;
     }
 
     try {
-        const data = JSON.parse(cached);
+        allowTempPageLoading = false;
 
-        storyTitle.textContent = data.title || "";
-        contentDiv.innerHTML = data.html || "";
+        if (data.storyData) {
+            applyStoryData(data.storyData);
+        } else {
+            storyTitle.textContent = data.title || "";
+            contentDiv.innerHTML = data.html || "";
+        }
+
         progressBar.value = data.percent || 0;
         pageProgressBar.value = data.pagePercent || 0;
         imageProgressBar.value = data.imagePercent || 0;
-        progressText.textContent = data.progressText || "Loaded from cache";
+        progressText.textContent = showMissingMessage
+            ? "Loaded from cache"
+            : data.progressText || "Loaded from cache";
         pageProgressText.textContent = data.pageProgressText || "0%";
         imageProgressText.textContent = data.imageProgressText || "0%";
         statsText.textContent = data.statsText || "Posts: 0 | Images: 0 downloaded, 0 skipped";
@@ -352,14 +570,37 @@ document.getElementById("loadFromCache").addEventListener("click", () => {
         }
         
         currentPage = contentDiv.querySelectorAll('.story-page').length + 1;
+        hasMorePages = false;
     } catch (err) {
         console.error(err);
         progressText.textContent = "Cache load failed";
     }
-});
+}
 
-document.getElementById("clearCache").addEventListener("click", () => {
+document.getElementById("clearCache").addEventListener("click", async () => {
     localStorage.removeItem(cacheKey);
+    await clearBrowserCache();
+    allowTempPageLoading = false;
+    contentDiv.innerHTML = "";
+    storyTitle.textContent = "";
+    currentStoryData = null;
+    currentPage = 1;
+    hasMorePages = false;
+    progressBar.value = 0;
+    pageProgressBar.value = 0;
+    imageProgressBar.value = 0;
+    pageProgressText.textContent = "0%";
+    imageProgressText.textContent = "0%";
+    updateStats({ matchedPosts: 0, downloadedImages: 0, skippedImages: 0 });
+    updateStoryMeta({
+        lastFetch: "",
+        "total-image": 0,
+        "image-downlaods": 0,
+        "start-time": "",
+        "end time": "",
+        "duration taken": "",
+        "last-page-no": 0,
+    });
     progressText.textContent = "Cache cleared";
 });
 
@@ -402,6 +643,8 @@ document.getElementById("openReaderBtn").addEventListener("click", () => {
 
 function applyStoryData(storyData) {
     const normalized = normalizeStoryData(storyData);
+    allowTempPageLoading = false;
+    currentStoryData = normalized;
 
     closeActiveStream();
     setFetchingState(false);
@@ -559,9 +802,11 @@ function sanitizeFileName(name) {
 }
 
 function saveCache() {
-    localStorage.setItem(cacheKey, JSON.stringify({
+    const payload = {
+        id: "lastStory",
         title: storyTitle.textContent,
         html: contentDiv.innerHTML,
+        storyData: currentStoryData,
         percent: progressBar.value,
         pagePercent: pageProgressBar.value,
         imagePercent: imageProgressBar.value,
@@ -569,8 +814,80 @@ function saveCache() {
         pageProgressText: pageProgressText.textContent,
         imageProgressText: imageProgressText.textContent,
         statsText: statsText.textContent,
-        storyMetaHtml: storyMetaArea ? storyMetaArea.innerHTML : ""
-    }));
+        storyMetaHtml: storyMetaArea ? storyMetaArea.innerHTML : "",
+        savedAt: new Date().toISOString(),
+    };
+
+    saveBrowserCache(payload).catch((err) => {
+        console.warn("IndexedDB cache save skipped:", err.message);
+    });
+}
+
+function openStoryCacheDb() {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(idbName, 1);
+
+        request.onupgradeneeded = () => {
+            const db = request.result;
+            if (!db.objectStoreNames.contains(idbStoreName)) {
+                db.createObjectStore(idbStoreName, { keyPath: "id" });
+            }
+        };
+
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+}
+
+async function saveBrowserCache(payload) {
+    const db = await openStoryCacheDb();
+
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(idbStoreName, "readwrite");
+        tx.objectStore(idbStoreName).put(payload);
+        tx.oncomplete = () => {
+            db.close();
+            resolve();
+        };
+        tx.onerror = () => {
+            db.close();
+            reject(tx.error);
+        };
+    });
+}
+
+async function loadBrowserCache() {
+    const db = await openStoryCacheDb();
+
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(idbStoreName, "readonly");
+        const request = tx.objectStore(idbStoreName).get("lastStory");
+
+        request.onsuccess = () => resolve(request.result || null);
+        request.onerror = () => reject(request.error);
+        tx.oncomplete = () => db.close();
+        tx.onerror = () => {
+            db.close();
+            reject(tx.error);
+        };
+    });
+}
+
+async function clearBrowserCache() {
+    const db = await openStoryCacheDb();
+
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(idbStoreName, "readwrite");
+        tx.objectStore(idbStoreName).delete("lastStory");
+        tx.oncomplete = () => {
+            db.close();
+            resolve();
+        };
+        tx.onerror = () => {
+            db.close();
+            reject(tx.error);
+        };
+    });
 }
 
 function applyTheme(theme) {

@@ -8,17 +8,33 @@ const domainConfigs = {
         writerNameSelector: ".p-body-header .p-description ul li a.username",
         postBodySelector: (writerName) =>
             `article[data-author="${cssAttributeEscape(writerName)}"] .message-inner .message-cell--main .message-main .message-content .message-userContent article.message-body.js-selectToQuote`,
-        fallbackPostSelector: "article.message-body.js-selectToQuote, article.message-body",
-        fallbackWriterSelector: ".message-userDetails span[itemprop='name']",
+        // fallbackPostSelector: "article.message-body.js-selectToQuote, article.message-body",
+        // fallbackWriterSelector: ".message-userDetails span[itemprop='name']",
     },
     "xforum.live": null,
     "xossipy.com": {
-        titleSelector: "",
-        lastPageSelector: "",
-        writerNameSelector: "",
-        postBodySelector: null,
-        fallbackPostSelector: "",
-        fallbackWriterSelector: "",
+        // 1. Thread ka title get karne ke liye
+        titleSelector: "td.thead div strong",
+        
+        // 2. Last page navigation link (MyBB Standard)
+        lastPageSelector: ".pagination a.pagination_last", 
+        
+        // 3. Pehle post se writer ka naam extract karne ke liye
+        writerNameSelector: ".post:first-child .author_information a", 
+        
+        /* 4. CHEERIO-COMPATIBLE DYNAMIC SELECTOR
+           Agar aapke paas scraping logic mein user ki ID ya naam (jaise '3905' ya 'seansean007') 
+           pehle se available hai, to aap is tarah return kar sakte hain.
+        */
+        postBodySelector: (writerIdentifier) => {
+            // Agar aap loop se bchna chahte hain, to Cheerio ka strict ':has' selector use karein
+            // Yeh selector check karega ki kis post ke href link mein writer ka identifier/naam maujood hai
+            return `.post:has(.author_information a[href*="${writerIdentifier}"]) .post_body`;
+        },
+        
+        // Agar dynamic selector fail ho jaye, to pure page ke saare posts uthane ke liye fallbacks
+        fallbackPostSelector: ".post_body",
+        fallbackWriterSelector: ".author_information a",
     },
 };
 domainConfigs["xforum.live"] = domainConfigs["exforum.live"];
