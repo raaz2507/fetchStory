@@ -194,18 +194,19 @@ exports.streamStory = async (req, res) => {
 
     try {
         const existingStoryData = appendMode ? readExistingStoryData(jsonFilePath) : null;
-        const resumePage = existingStoryData ? Number(existingStoryData["last-page-no"] || 0) : 0;
-        const startPage = appendMode && resumePage > 0 ? resumePage : requestedStartPage;
+        const effectiveAppendMode = appendMode && existingStoryData && isSameStorySource(existingStoryData.url, url);
+        const resumePage = effectiveAppendMode ? Number(existingStoryData["last-page-no"] || 0) : 0;
+        const startPage = effectiveAppendMode && resumePage > 0 ? resumePage : requestedStartPage;
 
         // 2. पुराने फाइलों को साफ़ करें
-        if (appendMode) {
+        if (effectiveAppendMode) {
             fs.mkdirSync(imagesPath, { recursive: true });
         } else {
             cleanTempFolder();
         }
 
         // 3. JSON का शुरुआती ढांचा आपके नए फॉर्मेट (eng और hindi) के अनुसार सेट किया
-        const storyObj = existingStoryData || createStoryDataShell(url, author, startedAt);
+        const storyObj = effectiveAppendMode ? existingStoryData : createStoryDataShell(url, author, startedAt);
         ensureStoryDataMeta(storyObj, url, author, startedAt);
         storyObj["start-time"] = startedAt.toISOString();
         storyObj["end time"] = "";
@@ -216,7 +217,7 @@ exports.streamStory = async (req, res) => {
 
         console.log("Starting scraper for URL:", url);
         const postNumberMap = new Map();
-        const baseDownloadedImages = existingStoryData ? Number(existingStoryData["image-downlaods"] || 0) : 0;
+        const baseDownloadedImages = effectiveAppendMode ? Number(existingStoryData["image-downlaods"] || 0) : 0;
         writeStoryJson = createJsonWriteBuffer(jsonFilePath);
 
         // 4. स्क्रैपर को रन करें
@@ -382,11 +383,16 @@ function cleanTempFolder() {
     const jsonFilePath = path.join(tempPath, "story_data.json");
 
     try {
-        if (fs.existsSync(imagesPath)) {
-            fs.rmSync(imagesPath, { recursive: true, force: true });
-        }
+        fs.mkdirSync(tempPath, { recursive: true });
+
         if (fs.existsSync(jsonFilePath)) {
             fs.rmSync(jsonFilePath, { force: true });
+        }
+
+        if (fs.existsSync(imagesPath)) {
+            for (const imageFile of fs.readdirSync(imagesPath)) {
+                fs.rmSync(path.join(imagesPath, imageFile), { recursive: true, force: true });
+            }
         }
     } catch (err) {
         console.log(
@@ -394,8 +400,6 @@ function cleanTempFolder() {
             err.message,
         );
     }
-
-    fs.mkdirSync(imagesPath, { recursive: true });
 }
 
 function createStoryDataShell(url, author, startedAt) {
@@ -458,6 +462,31 @@ function readExistingStoryData(jsonFilePath) {
     } catch (err) {
         console.error("Existing JSON read failed:", err.message);
         return null;
+    }
+}
+
+function isSameStorySource(existingUrl, requestedUrl) {
+    return getStorySourceKey(existingUrl) === getStorySourceKey(requestedUrl);
+}
+
+function getStorySourceKey(inputUrl) {
+    if (!inputUrl) return "";
+
+    try {
+        const parsed = new URL(inputUrl);
+        const domain = parsed.hostname.replace(/^www\./, "").toLowerCase();
+
+        if (domain === "rajsharmastories.com") {
+            return `${domain}:topic:${parsed.searchParams.get("t") || parsed.pathname}`;
+        }
+
+        if (domain === "xossipy.com") {
+            return `${domain}:${parsed.pathname.replace(/-page-\d+\.html$/i, ".html")}`;
+        }
+
+        return `${domain}:${parsed.pathname.replace(/\/page-\d+\/?$/i, "").replace(/\/?$/, "/")}`;
+    } catch (err) {
+        return String(inputUrl).trim();
     }
 }
 

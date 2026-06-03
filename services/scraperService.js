@@ -143,13 +143,16 @@ async function scrapeStoryWithImages(originalURL, authorName, baseFolder, progre
         const totalBlocks = Math.max(articleBodies.length, 1);
         
         for (let blockIndex = 0; blockIndex < articleBodies.length; blockIndex++) {
-            const article = $page(articleBodies[blockIndex]);
+            const articleBody = articleBodies[blockIndex];
+            const articleHTML = typeof articleBody.bodyHTML === "string"
+                ? articleBody.bodyHTML
+                : $page(articleBody).html();
             throwIfCancelled(signal);
             stats.pagePercent = Math.floor((blockIndex / totalBlocks) * 100);
 
             stats.authorMatches++;
 
-            const $content = cheerio.load(article.html() || "");
+            const $content = cheerio.load(articleHTML || "");
             const imgs = $content("img").toArray();
             stats.totalImages += imgs.length;
             stats.totalImagesOnCurrentPost = loadImages ? imgs.length : 0;
@@ -296,6 +299,12 @@ function getBaseURL(url, domain) {
         return url.replace(/-page-\d+\.html$/i, ".html");
     }
 
+    if (domain === "rajsharmastories.com") {
+        const parsed = new URL(url);
+        parsed.searchParams.delete("start");
+        return parsed.href;
+    }
+
     return url.replace(/\/page-\d+\/?$/, "").replace(/\/?$/, "/");
 }
 
@@ -304,6 +313,16 @@ function getPageURL(baseURL, pageNumber) {
         return pageNumber === 1
             ? baseURL
             : baseURL.replace(/\.html$/i, `-page-${pageNumber}.html`);
+    }
+
+    if (baseURL.includes("rajsharmastories.com/") && baseURL.includes("viewtopic.php")) {
+        const pageURL = new URL(baseURL);
+        if (pageNumber === 1) {
+            pageURL.searchParams.delete("start");
+        } else {
+            pageURL.searchParams.set("start", String((pageNumber - 1) * 5));
+        }
+        return pageURL.href;
     }
 
     return pageNumber === 1 ? baseURL : `${baseURL}page-${pageNumber}`;
@@ -385,7 +404,12 @@ function getSupportedSiteOrThrow(url) {
 }
 
 function getTitle($, config) {
-    return $(config.titleSelector).first().text().trim();
+    const matches = $(config.titleSelector);
+    const titleNode = config.titleSelectorPosition === "last"
+        ? matches.last()
+        : matches.first();
+
+    return titleNode.text().trim();
 }
 
 function getWriterName($, config) {
@@ -393,6 +417,10 @@ function getWriterName($, config) {
 }
 
 function findWriterPostBodies($, writerName, config) {
+    if (typeof config.customPostExtractor === "function") {
+        return config.customPostExtractor($, writerName) || [];
+    }
+
     const directMatches = $(config.postBodySelector(writerName)).toArray();
     if (directMatches.length) return directMatches;
 
@@ -445,6 +473,12 @@ function getLastPage($, config) {
     $(config.lastPageSelector).each((i, el) => {
         const num = parseInt($(el).text().trim(), 10);
         if (!Number.isNaN(num)) max = Math.max(max, num);
+
+        const href = $(el).attr("href") || "";
+        const hrefPageMatch = href.match(/(?:^|[-?&=\/])page[-=]?(\d+)(?:\.html)?/i);
+        if (hrefPageMatch) {
+            max = Math.max(max, parseInt(hrefPageMatch[1], 10));
+        }
     });
     return max;
 }

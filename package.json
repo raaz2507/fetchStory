@@ -11,6 +11,9 @@
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "engines": {
+    "node": "^26"
+  },
   "dependencies": {
 	  "archiver": "^7.0.1",
 	  "axios": "^1.13.5",

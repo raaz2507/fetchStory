@@ -364,6 +364,7 @@ fetchBtn.addEventListener("click", () => {
     if (!appendFromJson) {
         contentDiv.innerHTML = "";
         storyTitle.textContent = "";
+        currentStoryData = null;
     }
     progressBar.value = 0;
     pageProgressBar.value = 0;
@@ -550,7 +551,7 @@ async function restoreFromCache(showMissingMessage) {
         allowTempPageLoading = false;
 
         if (data.storyData) {
-            applyStoryData(data.storyData);
+            applyStoryData(data.storyData, { enableAppend: false });
         } else {
             storyTitle.textContent = data.title || "";
             contentDiv.innerHTML = data.html || "";
@@ -641,7 +642,8 @@ document.getElementById("openReaderBtn").addEventListener("click", () => {
     window.open("/reader_template.html", "_blank", "noopener");
 });
 
-function applyStoryData(storyData) {
+function applyStoryData(storyData, options = {}) {
+    const enableAppend = options.enableAppend !== false;
     const normalized = normalizeStoryData(storyData);
     allowTempPageLoading = false;
     currentStoryData = normalized;
@@ -685,7 +687,7 @@ function applyStoryData(storyData) {
     });
     updateStoryMeta(normalized);
     currentStoryMeta = normalized;
-    document.getElementById("appendFromJson").checked = true;
+    document.getElementById("appendFromJson").checked = enableAppend;
 }
 
 function normalizeStoryData(storyData) {

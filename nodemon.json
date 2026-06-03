@@ -1,6 +1,7 @@
 {
   "ignore": [
     "temp/*",
+    "/data/*",
     "downloads/*",
 	"translator/outputs/*"
   ]

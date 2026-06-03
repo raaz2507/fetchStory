@@ -1,6 +1,8 @@
 /temp/
 /downloads/
+/data/
 /translator/outputs/
 /node_modules/
 
 package-lock.json
+
