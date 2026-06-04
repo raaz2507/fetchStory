@@ -190,6 +190,11 @@
 				color: white;
 				border: none;
 			}
+			.clear-cache-btn {
+				background: #dc3545;
+				color: white;
+				border: none;
+			}
 			.language-toggle-btn {
 				background: #007bff;
 				color: white;
@@ -507,6 +512,12 @@
 					onclick="handlePrint()">
 					🖨️ Print Story
 				</button>
+				<button
+					class="btn-common clear-cache-btn"
+					id="clear-cache-btn"
+					style="margin-top: 8px">
+					Clear Cache
+				</button>
 			</div>
 		</div>
 
@@ -545,6 +556,7 @@
 			const imageFolderPathInput = document.getElementById("imageFolderPath");
 			const setImageFolderBtn = document.getElementById("setImageFolderBtn");
 			const imageFolderStatus = document.getElementById("image-folder-status");
+			const clearCacheBtn = document.getElementById("clear-cache-btn");
 			const readProgress = document.getElementById("read-progress");
 			let useLocalImageFolder = false;
 			let lastScrollSaveAt = 0;
@@ -654,6 +666,10 @@
 
 				if (setImageFolderBtn) {
 					setImageFolderBtn.addEventListener("click", setImageFolderPath);
+				}
+
+				if (clearCacheBtn) {
+					clearCacheBtn.addEventListener("click", clearReaderCache);
 				}
 
 				const savedImageFolderPath =
@@ -882,6 +898,51 @@
 							reject(tx.error);
 						};
 					});
+				}
+
+				async function clearReaderCache() {
+					const confirmed = window.confirm(
+						"Clear cached story and saved reading positions?",
+					);
+					if (!confirmed) return;
+
+					if (clearCacheBtn) clearCacheBtn.disabled = true;
+					statusDiv.textContent = "Clearing cache...";
+
+					try {
+						const db = await openReaderCacheDb();
+						await new Promise((resolve, reject) => {
+							const tx = db.transaction(readerCacheStoreName, "readwrite");
+							tx.objectStore(readerCacheStoreName).delete(readerStoryCacheId);
+							tx.oncomplete = () => {
+								db.close();
+								resolve();
+							};
+							tx.onerror = () => {
+								db.close();
+								reject(tx.error);
+							};
+						});
+
+						for (let i = localStorage.length - 1; i >= 0; i--) {
+							const key = localStorage.key(i);
+							if (key && key.startsWith("readerScroll:")) {
+								localStorage.removeItem(key);
+							}
+						}
+
+						fileNameDisplay.textContent = storyData
+							? "Cache cleared"
+							: "No file chosen";
+						statusDiv.textContent =
+							"Cache cleared. Reload will not auto-load this story.";
+						updateReadProgress();
+					} catch (err) {
+						console.error(err);
+						statusDiv.textContent = err.message || "Cache clear failed.";
+					} finally {
+						if (clearCacheBtn) clearCacheBtn.disabled = false;
+					}
 				}
 
 				async function loadStoryJson() {
