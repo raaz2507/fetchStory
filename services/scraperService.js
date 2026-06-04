@@ -43,12 +43,6 @@ async function scrapeStoryWithImages(originalURL, authorName, baseFolder, progre
     const firstPage = startPage > 1 && startPage <= lastPage ? startPage : 1;
     const totalPagesToFetch = lastPage - firstPage + 1;
 
-    // 💡 बदलाव 1: storyPosts को यहाँ फंक्शन के अंदर रखें, ताकि हर बार नया स्क्रैप होने पर फ्रेश ऑब्जेक्ट बने।
-    const storyPosts = {
-        eng: {},
-        hindi: {}
-    };
-
     const stats = {
         matchedPosts: 0,
         totalImages: 0,
@@ -65,9 +59,9 @@ async function scrapeStoryWithImages(originalURL, authorName, baseFolder, progre
         writerName
     };
 
-    const processPostImages = async (imgs, $content, pageURL, currentPage, getCurrentPostHTML) => {
+    const processPostImages = async (imgs, $content, pageURL, currentPage) => {
         const imageProgressValues = new Array(imgs.length).fill(0);
-        const imageConcurrency = Math.max(1, options.imageConcurrency || 4);
+        const imageConcurrency = Math.max(1, options.imageConcurrency || 1);
 
         await runLimited(
             imgs.map((img, index) => async () => {
@@ -92,7 +86,7 @@ async function scrapeStoryWithImages(originalURL, authorName, baseFolder, progre
                             stats.totalImagesOnCurrentPost = imageProgress.totalImages;
                             stats.imagePercent = getAveragePercent(imageProgressValues);
 
-                            sendProgress(progressCallback, currentPage, firstPage, lastPage, totalPagesToFetch, getCurrentPostHTML(), title, stats);
+                            sendProgress(progressCallback, currentPage, firstPage, lastPage, totalPagesToFetch, null, title, stats);
                         }
                     );
                     const localPath = imageResult && imageResult.localPath;
@@ -115,7 +109,7 @@ async function scrapeStoryWithImages(originalURL, authorName, baseFolder, progre
 
                 imageProgressValues[index] = 100;
                 stats.imagePercent = getAveragePercent(imageProgressValues);
-                sendProgress(progressCallback, currentPage, firstPage, lastPage, totalPagesToFetch, getCurrentPostHTML(), title, stats);
+                sendProgress(progressCallback, currentPage, firstPage, lastPage, totalPagesToFetch, null, title, stats);
             }),
             imageConcurrency
         );
@@ -175,8 +169,7 @@ async function scrapeStoryWithImages(originalURL, authorName, baseFolder, progre
                     imgs,
                     $content,
                     pageURL,
-                    i,
-                    () => $content('body').html() + "<hr/>"
+                    i
                 );
                 currentPostHTML = $content('body').html() + "<hr/>";
             }
@@ -189,8 +182,6 @@ async function scrapeStoryWithImages(originalURL, authorName, baseFolder, progre
 
             // 💡 बदलाव 2: यहाँ कलेक्ट होते समय आपके नए स्ट्रक्चर के अनुसार सेव होगा।
             // वर्तमान में स्क्रैप किया गया कन्टेंट 'eng' में जाएगा और 'hindi' अभी के लिए खाली रहेगा।
-            storyPosts.eng[stats.matchedPosts] = currentPostHTML;
-            
             stats.pagePercent = Math.floor(((blockIndex + 1) / totalBlocks) * 100);
             
             sendProgress(progressCallback, i, firstPage, lastPage, totalPagesToFetch, currentPostHTML, title, stats);
@@ -202,25 +193,12 @@ async function scrapeStoryWithImages(originalURL, authorName, baseFolder, progre
         sendProgress(progressCallback, i, firstPage, lastPage, totalPagesToFetch, null, title, stats);
     };
 
-    const pageNumbers = createPageNumbers(firstPage, lastPage);
-    const pageFetchConcurrency = Math.max(1, options.pageFetchConcurrency || 3);
-    const pageFetches = createLimitedTaskMap(
-        pageNumbers,
-        pageFetchConcurrency,
-        async (i) => {
-            throwIfCancelled(signal);
-
-            const pageURL = getPageURL(baseURL, i);
-            console.info(`Page loading: ${pageURL}`);
-
-            const $page = i === 1 ? $firstPage : await fetchPage(pageURL, signal);
-            return { pageURL, $page };
-        }
-    );
-
-    for (const i of pageNumbers) {
+    for (const i of createPageNumbers(firstPage, lastPage)) {
         throwIfCancelled(signal);
-        const { pageURL, $page } = await pageFetches.get(i);
+        const pageURL = getPageURL(baseURL, i);
+        console.info(`Page loading: ${pageURL}`);
+
+        const $page = i === 1 ? $firstPage : await fetchPage(pageURL, signal);
         await processFetchedPage(i, pageURL, $page);
     }
 
@@ -236,12 +214,9 @@ async function scrapeStoryWithImages(originalURL, authorName, baseFolder, progre
 
     console.log("Scraping complete.");
     
-    // 💡 बदलाव 3: यहाँ से 'posts' ऑब्जेक्ट के रूप में सुधरा हुआ 'storyPosts' रिटर्न करें
-    // ताकि जहाँ भी यह फाइल डिस्क पर सेव हो रही है, इसे पूरा सही फॉर्मेट मिले।
     return { 
         title, 
-        stats, 
-        posts: storyPosts 
+        stats
     };
 }
 

@@ -25,10 +25,14 @@ async function processTranslation(storyData, jobId, expectedChecksum) {
 	progressStore[jobId].done = false;
 	progressStore[jobId].checksum = actualChecksum;
 	progressStore[jobId].currentPage = null;
-	progressStore[jobId].message = "Translation started";
+	progressStore[jobId].message = "Loading dictionary";
+
+	const dictionaryStatus = await TransliterationEngine.initializeDictionary();
+	progressStore[jobId].dictionarySource = dictionaryStatus.source;
+	progressStore[jobId].message = `Translation started (${dictionaryStatus.source} dictionary)`;
 
 	console.log(
-		`[translator:${jobId}] Translation started: ${postKeys.length} posts`
+		`[translator:${jobId}] Translation started: ${postKeys.length} posts (${dictionaryStatus.source} dictionary)`
 	);
 
 	const allNotFoundWords = [];

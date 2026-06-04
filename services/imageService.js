@@ -82,7 +82,7 @@ async function downloadUniqueImage(finalUrl, baseFolder, imageIndex, totalImages
 
         const imagePercent = totalLength ? Math.floor((downloadedLength / totalLength) * 100) : 0;
         if (totalLength) {
-            process.stdout.write(`Image ${imageIndex}: ${imagePercent}%\r`);
+            safeStdoutWrite(`Image ${imageIndex}: ${imagePercent}%\r`);
         }
 
         if (progressCallback && shouldReportProgress(imagePercent, lastProgressPercent, downloadedLength, totalLength)) {
@@ -137,7 +137,7 @@ async function downloadUniqueImage(finalUrl, baseFolder, imageIndex, totalImages
     const digest = hash.digest("hex").slice(0, 10);
 
     if (savedHashes.has(digest)) {
-        fs.rmSync(tempFilePath, { force: true });
+        await removeFileWithRetry(tempFilePath);
         console.log("\nDuplicate image skipped");
         const duplicatePath = savedHashes.get(digest);
         savedUrls.set(finalUrl, duplicatePath);
@@ -152,7 +152,7 @@ async function downloadUniqueImage(finalUrl, baseFolder, imageIndex, totalImages
     const fileName = `${digest}${ext}`;
     const filePath = path.join(imagesFolder, fileName);
 
-    fs.renameSync(tempFilePath, filePath);
+    await renameFileWithRetry(tempFilePath, filePath);
 
     const relativePath = `images/${fileName}`;
     savedHashes.set(digest, relativePath);
@@ -170,6 +170,52 @@ async function downloadUniqueImage(finalUrl, baseFolder, imageIndex, totalImages
 function shouldReportProgress(currentPercent, lastPercent, downloadedLength, totalLength) {
     if (!totalLength) return downloadedLength === 0;
     return currentPercent === 100 || currentPercent >= lastPercent + 5;
+}
+
+async function renameFileWithRetry(sourcePath, targetPath) {
+    const retryableCodes = new Set(["EBUSY", "EPERM", "EACCES"]);
+
+    for (let attempt = 1; attempt <= 5; attempt++) {
+        try {
+            await fs.promises.rename(sourcePath, targetPath);
+            return;
+        } catch (err) {
+            if (!retryableCodes.has(err.code) || attempt === 5) {
+                throw err;
+            }
+
+            await delay(150 * attempt);
+        }
+    }
+}
+
+async function removeFileWithRetry(filePath) {
+    const retryableCodes = new Set(["EBUSY", "EPERM", "EACCES"]);
+
+    for (let attempt = 1; attempt <= 5; attempt++) {
+        try {
+            await fs.promises.rm(filePath, { force: true });
+            return;
+        } catch (err) {
+            if (!retryableCodes.has(err.code) || attempt === 5) {
+                throw err;
+            }
+
+            await delay(150 * attempt);
+        }
+    }
+}
+
+function safeStdoutWrite(message) {
+    try {
+        process.stdout.write(message);
+    } catch (err) {
+        console.log(message.trim());
+    }
+}
+
+function delay(milliseconds) {
+    return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 function createScrapeError(code, message) {

@@ -444,6 +444,12 @@ fetchBtn.addEventListener("click", () => {
             if (data.storyData) {
                 currentStoryData = normalizeStoryData(data.storyData);
                 currentStoryMeta = currentStoryData;
+            } else if (data.meta) {
+                finishCurrentStoryMeta();
+                currentStoryMeta = {
+                    ...currentStoryMeta,
+                    ...data.meta,
+                };
             } else {
                 finishCurrentStoryMeta();
             }

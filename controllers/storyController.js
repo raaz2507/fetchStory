@@ -125,11 +125,12 @@ exports.uploadStoryJson = async (req, res) => {
         fs.mkdirSync(imagesPath, { recursive: true });
 
         const storyData = normalizeStoryData(uploadedData);
-        fs.writeFileSync(jsonFilePath, JSON.stringify(storyData, null, 2));
+        writeStoryDataFile(jsonFilePath, storyData);
 
         res.json({
             ok: true,
             storyData,
+            meta: createStorySummary(storyData),
         });
     } catch (err) {
         console.error("JSON upload error:", err);
@@ -154,11 +155,12 @@ exports.processUploadedStoryImages = async (req, res) => {
         );
         const result = await processStoryJsonImages(storyData, tempFolder);
 
-        fs.writeFileSync(jsonFilePath, JSON.stringify(result.storyData, null, 2));
+        writeStoryDataFile(jsonFilePath, result.storyData);
 
         res.json({
             ok: true,
             storyData: result.storyData,
+            meta: createStorySummary(result.storyData),
             stats: result.stats,
         });
     } catch (err) {
@@ -175,6 +177,10 @@ exports.streamStory = async (req, res) => {
     res.flushHeaders();
 
     const controller = new AbortController();
+    res.on("error", (err) => {
+        console.error("Story stream response error:", err.message);
+        controller.abort();
+    });
     req.on("close", () => {
         console.log("Client closed connection, aborting...");
         controller.abort();
@@ -212,11 +218,20 @@ exports.streamStory = async (req, res) => {
         storyObj["end time"] = "";
         storyObj["duration taken"] = "";
         storyObj.lastFetch = startedAt.toISOString();
-        fs.writeFileSync(jsonFilePath, JSON.stringify(storyObj, null, 2));
+        writeStoryDataFile(jsonFilePath, storyObj);
         let liveStoryJson = storyObj;
 
         console.log("Starting scraper for URL:", url);
         const postNumberMap = new Map();
+        const postImageCountMap = new Map();
+        const knownPostNumbers = new Set(Object.keys(storyObj.posts.eng));
+        for (const postNumber of knownPostNumbers) {
+            postImageCountMap.set(postNumber, countImagesInHtml(storyObj.posts.eng[postNumber]));
+        }
+        let livePostCount = knownPostNumbers.size;
+        let liveTotalImages = [...postImageCountMap.values()].reduce((total, count) => total + count, 0);
+        let lastKnownPage = Number(storyObj["last-page-no"] || 0);
+        let nextPostNumber = getNextPostNumber(storyObj.posts.eng);
         const baseDownloadedImages = effectiveAppendMode ? Number(existingStoryData["image-downlaods"] || 0) : 0;
         writeStoryJson = createJsonWriteBuffer(jsonFilePath);
 
@@ -226,6 +241,7 @@ exports.streamStory = async (req, res) => {
             author,
             tempFolder,
             (progressData) => {
+                let shouldWriteStoryJson = false;
                 try {
                     if (progressData) {
                         // हर बार फाइल को सुरक्षित रीड करें
@@ -245,7 +261,11 @@ exports.streamStory = async (req, res) => {
                         currentJson["total-image"] = progressData.totalImages || currentJson["total-image"] || 0;
                         currentJson["image-downlaods"] = baseDownloadedImages + (progressData.downloadedImages || 0);
                         progressData.downloadedImages = currentJson["image-downlaods"];
-                        currentJson["last-page-no"] = progressData.currentPage || currentJson["last-page-no"] || 0;
+                        if (progressData.currentPage && progressData.currentPage !== lastKnownPage) {
+                            lastKnownPage = progressData.currentPage;
+                            shouldWriteStoryJson = lastKnownPage % 25 === 0;
+                        }
+                        currentJson["last-page-no"] = lastKnownPage || currentJson["last-page-no"] || 0;
 
                         // 🚨 [सुधार]: सुपर डायनामिक कन्टेंट डिटेक्टर (matchedPosts पर निर्भरता खत्म)
                         let contentHtml = progressData.html || progressData.content || (progressData.post ? progressData.post.html : null);
@@ -254,35 +274,50 @@ exports.streamStory = async (req, res) => {
                             // पोस्ट का नंबर तय करें (अगर matchedPosts 0 या मिसिंग है, तो JSON की लेंथ से इंडेक्स ऑटो-इन्क्रीमेंट करें)
                             const localPostNum = progressData.matchedPosts || progressData.currentPage || progressData.page;
                             let currentPostNum = postNumberMap.get(localPostNum);
-                            const duplicatePostNum = findPostNumberByHtml(currentJson.posts.eng, contentHtml);
 
                             if (!currentPostNum) {
-                                currentPostNum = duplicatePostNum || getNextPostNumber(currentJson.posts.eng);
+                                currentPostNum = nextPostNumber++;
                                 postNumberMap.set(localPostNum, currentPostNum);
                             }
 
                             // डेटा असाइन करें
-                            currentJson.posts.eng[currentPostNum] = contentHtml;
+                            const currentPostKey = String(currentPostNum);
+                            const postHtmlChanged = currentJson.posts.eng[currentPostKey] !== contentHtml;
+                            currentJson.posts.eng[currentPostKey] = contentHtml;
+                            if (!knownPostNumbers.has(currentPostKey)) {
+                                knownPostNumbers.add(currentPostKey);
+                                livePostCount++;
+                                shouldWriteStoryJson = true;
+                            }
+                            const previousImageCount = postImageCountMap.get(currentPostKey) || 0;
+                            const nextImageCount = countImagesInHtml(contentHtml);
+                            postImageCountMap.set(currentPostKey, nextImageCount);
+                            liveTotalImages += nextImageCount - previousImageCount;
                             progressData.currentPostNum = Number(currentPostNum);
-                            progressData.matchedPosts = Object.keys(currentJson.posts.eng).length;
-                            currentJson["total-image"] = countImagesInPosts(currentJson.posts.eng);
+                            progressData.matchedPosts = livePostCount;
+                            currentJson["total-image"] = liveTotalImages;
                             progressData.totalImages = currentJson["total-image"];
                             // फाइल में डेटा फ़ोर्स राइट करें
-                            console.log(`📝 [JSON UPDATED] Part ${currentPostNum} successfully saved to story_data.json`);
+                            if (postHtmlChanged) {
+                                shouldWriteStoryJson = true;
+                                console.log(`📝 [JSON UPDATED] Part ${currentPostNum} successfully saved to story_data.json`);
+                            } else {
+                                delete progressData.html;
+                            }
                         } else {
                             console.log("⚠️ Progress received, but no valid HTML content found.");
                         }
                         liveStoryJson = currentJson;
-                        writeStoryJson(liveStoryJson);
+                        if (shouldWriteStoryJson) {
+                            writeStoryJson(liveStoryJson);
+                        }
                     }
                 } catch (writeErr) {
                     console.error("Error writing post to JSON:", writeErr.message);
                 }
 
                 // फ्रंटएंड को लाइव डेटा भेजें
-                if (!res.writableEnded) {
-                    res.write(`data: ${JSON.stringify(progressData)}\n\n`);
-                }
+                writeSseEvent(res, progressData, controller);
             },
             {
                 startPage,
@@ -293,26 +328,20 @@ exports.streamStory = async (req, res) => {
         );
 
         // 5. काम पूरा होने पर 'done' भेजें
-        writeStoryJson.flush();
-        const finalStoryData = finalizeStoryDataFile(jsonFilePath, url, author, startedAt);
+        flushStoryJson(writeStoryJson);
+        const finalStoryData = safeFinalizeStoryDataFile(jsonFilePath, url, author, startedAt);
 
-        if (!res.writableEnded) {
-            res.write(`data: ${JSON.stringify({ done: true, storyData: finalStoryData })}\n\n`);
+        if (writeSseEvent(res, { done: true, meta: createStorySummary(finalStoryData) }, controller)) {
             res.end();
         }
     } catch (err) {
-        if (writeStoryJson) {
-            writeStoryJson.flush();
-        }
-        finalizeStoryDataFile(jsonFilePath, url, author, startedAt);
+        flushStoryJson(writeStoryJson);
+        safeFinalizeStoryDataFile(jsonFilePath, url, author, startedAt);
         console.error("=== CRITICAL SCRAPER ERROR ===");
         console.error(err);
         console.error("==============================");
 
-        if (!res.writableEnded) {
-            res.write(
-                `data: ${JSON.stringify({ error: getClientErrorMessage(err) })}\n\n`,
-            );
+        if (writeSseEvent(res, { error: getClientErrorMessage(err) }, controller)) {
             res.end();
         }
     }
@@ -519,14 +548,14 @@ function normalizeHtmlForDuplicate(html) {
 }
 
 function createJsonWriteBuffer(jsonFilePath) {
-    const minWriteIntervalMs = 1000;
+    const minWriteIntervalMs = 10000;
     let pendingJson = null;
     let lastWriteAt = 0;
 
     const writeNow = () => {
         if (!pendingJson) return;
 
-        fs.writeFileSync(jsonFilePath, JSON.stringify(pendingJson, null, 2));
+        writeStoryDataFile(jsonFilePath, pendingJson);
         pendingJson = null;
         lastWriteAt = Date.now();
     };
@@ -544,12 +573,48 @@ function createJsonWriteBuffer(jsonFilePath) {
     return bufferedWrite;
 }
 
+function flushStoryJson(writeStoryJson) {
+    if (!writeStoryJson) return;
+
+    try {
+        writeStoryJson.flush();
+    } catch (err) {
+        console.error("Final JSON flush failed:", err.message);
+    }
+}
+
+function safeFinalizeStoryDataFile(jsonFilePath, url, author, startedAt) {
+    try {
+        return finalizeStoryDataFile(jsonFilePath, url, author, startedAt);
+    } catch (err) {
+        console.error("Final story_data.json update failed:", err.message);
+        return null;
+    }
+}
+
+function writeSseEvent(res, payload, controller) {
+    if (res.writableEnded || res.destroyed) return false;
+
+    try {
+        res.write(`data: ${JSON.stringify(payload)}\n\n`);
+        return true;
+    } catch (err) {
+        console.error("SSE write failed:", err.message);
+        if (controller) controller.abort();
+        return false;
+    }
+}
+
 function countImagesInPosts(posts) {
     return Object.values(posts).reduce((count, html) => {
-        if (typeof html !== "string") return count;
-        const matches = html.match(/<img\b/gi);
-        return count + (matches ? matches.length : 0);
+        return count + countImagesInHtml(html);
     }, 0);
+}
+
+function countImagesInHtml(html) {
+    if (typeof html !== "string") return 0;
+    const matches = html.match(/<img\b/gi);
+    return matches ? matches.length : 0;
 }
 
 function ensureStoryDataMeta(storyData, url, author, startedAt) {
@@ -580,8 +645,30 @@ function finalizeStoryDataFile(jsonFilePath, url, author, startedAt) {
     storyData["end time"] = completedAt.toISOString();
     storyData["duration taken"] = formatDuration(completedAt - startedAt);
 
-    fs.writeFileSync(jsonFilePath, JSON.stringify(storyData, null, 2));
+    writeStoryDataFile(jsonFilePath, storyData);
     return storyData;
+}
+
+function writeStoryDataFile(jsonFilePath, storyData) {
+    fs.writeFileSync(jsonFilePath, JSON.stringify(storyData));
+}
+
+function createStorySummary(storyData) {
+    if (!storyData || typeof storyData !== "object") return null;
+
+    return {
+        url: storyData.url || "",
+        storyName: storyData.storyName || storyData.title || "",
+        "writer-name": storyData["writer-name"] || storyData.writerName || storyData.author || "",
+        totalPage: Number(storyData.totalPage || storyData.totalPages || 0),
+        lastFetch: storyData.lastFetch || "",
+        "total-image": Number(storyData["total-image"] || storyData.totalImages || 0),
+        "image-downlaods": Number(storyData["image-downlaods"] || storyData.downloadedImages || 0),
+        "start-time": storyData["start-time"] || "",
+        "end time": storyData["end time"] || "",
+        "duration taken": storyData["duration taken"] || "",
+        "last-page-no": Number(storyData["last-page-no"] || storyData.lastPageNo || 0),
+    };
 }
 
 function formatDuration(milliseconds) {
