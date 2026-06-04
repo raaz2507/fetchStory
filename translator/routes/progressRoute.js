@@ -48,6 +48,10 @@ router.get(
 				setTimeout(() => {
 					res.end();
 				}, 1000);
+
+				setTimeout(() => {
+					delete progressStore[jobId];
+				}, 10 * 60 * 1000);
 			}
 		}, 500);
 		req.on("close", () => {

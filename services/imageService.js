@@ -3,17 +3,24 @@ const path = require("path");
 const axios = require("axios");
 const crypto = require("crypto");
 
-const savedHashes = new Map();
-const savedUrls = new Map();
-const inFlightUrls = new Map();
+const globalImageCache = createImageCache();
 
-function resetImageCache() {
-    savedHashes.clear();
-    savedUrls.clear();
-    inFlightUrls.clear();
+function createImageCache() {
+    return {
+        savedHashes: new Map(),
+        savedUrls: new Map(),
+        inFlightUrls: new Map(),
+    };
 }
 
-async function downloadImageWithHash(imgUrl, baseFolder, imageIndex, totalImages, baseURL, signal, progressCallback) {
+function resetImageCache() {
+    globalImageCache.savedHashes.clear();
+    globalImageCache.savedUrls.clear();
+    globalImageCache.inFlightUrls.clear();
+}
+
+async function downloadImageWithHash(imgUrl, baseFolder, imageIndex, totalImages, baseURL, signal, progressCallback, imageCache) {
+    const cache = imageCache || globalImageCache;
     let finalUrl;
     try {
         finalUrl = new URL(imgUrl, baseURL).href;
@@ -21,36 +28,36 @@ async function downloadImageWithHash(imgUrl, baseFolder, imageIndex, totalImages
         return null;
     }
 
-    if (savedUrls.has(finalUrl)) {
+    if (cache.savedUrls.has(finalUrl)) {
         console.log(`\nDuplicate image URL skipped: ${finalUrl}`);
         return {
-            localPath: savedUrls.get(finalUrl),
+            localPath: cache.savedUrls.get(finalUrl),
             wasDuplicate: true,
             wasDownloaded: false
         };
     }
 
-    if (inFlightUrls.has(finalUrl)) {
+    if (cache.inFlightUrls.has(finalUrl)) {
         console.log(`\nWaiting for duplicate in-flight image: ${finalUrl}`);
-        const result = await inFlightUrls.get(finalUrl);
+        const result = await cache.inFlightUrls.get(finalUrl);
         return result && result.localPath
             ? { localPath: result.localPath, wasDuplicate: true, wasDownloaded: false }
             : result;
     }
 
-    const downloadPromise = downloadUniqueImage(finalUrl, baseFolder, imageIndex, totalImages, signal, progressCallback);
-    inFlightUrls.set(finalUrl, downloadPromise);
+    const downloadPromise = downloadUniqueImage(finalUrl, baseFolder, imageIndex, totalImages, signal, progressCallback, cache);
+    cache.inFlightUrls.set(finalUrl, downloadPromise);
 
     try {
         const localPath = await downloadPromise;
-        if (localPath && localPath.localPath) savedUrls.set(finalUrl, localPath.localPath);
+        if (localPath && localPath.localPath) cache.savedUrls.set(finalUrl, localPath.localPath);
         return localPath;
     } finally {
-        inFlightUrls.delete(finalUrl);
+        cache.inFlightUrls.delete(finalUrl);
     }
 }
 
-async function downloadUniqueImage(finalUrl, baseFolder, imageIndex, totalImages, signal, progressCallback) {
+async function downloadUniqueImage(finalUrl, baseFolder, imageIndex, totalImages, signal, progressCallback, cache) {
     console.log(`\nImage [${imageIndex}/${totalImages}] starting: ${finalUrl}`);
 
     const imagesFolder = path.join(baseFolder, "images");
@@ -136,11 +143,11 @@ async function downloadUniqueImage(finalUrl, baseFolder, imageIndex, totalImages
 
     const digest = hash.digest("hex").slice(0, 10);
 
-    if (savedHashes.has(digest)) {
+    if (cache.savedHashes.has(digest)) {
         await removeFileWithRetry(tempFilePath);
         console.log("\nDuplicate image skipped");
-        const duplicatePath = savedHashes.get(digest);
-        savedUrls.set(finalUrl, duplicatePath);
+        const duplicatePath = cache.savedHashes.get(digest);
+        cache.savedUrls.set(finalUrl, duplicatePath);
         return {
             localPath: duplicatePath,
             wasDuplicate: true,
@@ -155,8 +162,8 @@ async function downloadUniqueImage(finalUrl, baseFolder, imageIndex, totalImages
     await renameFileWithRetry(tempFilePath, filePath);
 
     const relativePath = `images/${fileName}`;
-    savedHashes.set(digest, relativePath);
-    savedUrls.set(finalUrl, relativePath);
+    cache.savedHashes.set(digest, relativePath);
+    cache.savedUrls.set(finalUrl, relativePath);
 
     console.log(`\nSaved image as ${fileName}`);
 
@@ -224,4 +231,4 @@ function createScrapeError(code, message) {
     return err;
 }
 
-module.exports = { downloadImageWithHash, resetImageCache };
+module.exports = { createImageCache, downloadImageWithHash, resetImageCache };

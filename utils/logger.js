@@ -1,0 +1,93 @@
+const fs = require("fs");
+const path = require("path");
+
+const logsFolder = path.join(__dirname, "..", "logs");
+const serverLogPath = path.join(logsFolder, "server.log");
+const crashLogPath = path.join(logsFolder, "server-crash.log");
+const maxLogBytes = 20 * 1024 * 1024;
+const originalConsole = {
+    log: console.log.bind(console),
+    info: console.info.bind(console),
+    warn: console.warn.bind(console),
+    error: console.error.bind(console),
+};
+
+let isConsolePatched = false;
+
+function ensureLogsFolder() {
+    fs.mkdirSync(logsFolder, { recursive: true });
+}
+
+function formatValue(value) {
+    if (value instanceof Error) {
+        return value.stack || value.message;
+    }
+
+    if (typeof value === "string") return value;
+
+    try {
+        return JSON.stringify(value);
+    } catch (err) {
+        return String(value);
+    }
+}
+
+function writeLine(level, values, filePath = serverLogPath) {
+    try {
+        ensureLogsFolder();
+        rotateLogIfNeeded(filePath);
+        const message = values.map(formatValue).join(" ");
+        fs.appendFileSync(
+            filePath,
+            `[${new Date().toISOString()}] [${level}] ${message}\n`
+        );
+    } catch (err) {
+        originalConsole.error("Could not write log file:", err.message);
+    }
+}
+
+function rotateLogIfNeeded(filePath) {
+    if (!fs.existsSync(filePath)) return;
+
+    const stat = fs.statSync(filePath);
+    if (stat.size < maxLogBytes) return;
+
+    const rotatedPath = `${filePath}.old`;
+    if (fs.existsSync(rotatedPath)) {
+        fs.rmSync(rotatedPath, { force: true });
+    }
+    fs.renameSync(filePath, rotatedPath);
+}
+
+function patchConsole() {
+    if (isConsolePatched) return;
+    isConsolePatched = true;
+
+    ["log", "info", "warn", "error"].forEach((level) => {
+        console[level] = (...values) => {
+            originalConsole[level](...values);
+            writeLine(level.toUpperCase(), values);
+        };
+    });
+}
+
+function logCrash(type, reason) {
+    const err = reason instanceof Error ? reason : new Error(String(reason));
+    writeLine("CRASH", [type, err], crashLogPath);
+    writeLine("CRASH", [type, err], serverLogPath);
+}
+
+function logMemory(label, level = "info") {
+    const usage = process.memoryUsage();
+    const heapMb = Math.round((usage.heapUsed / 1024 / 1024) * 100) / 100;
+    const rssMb = Math.round((usage.rss / 1024 / 1024) * 100) / 100;
+    console[level](`[memory] ${label}: heap=${heapMb}MB rss=${rssMb}MB`);
+}
+
+module.exports = {
+    patchConsole,
+    logCrash,
+    logMemory,
+    serverLogPath,
+    crashLogPath,
+};

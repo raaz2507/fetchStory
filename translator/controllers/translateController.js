@@ -26,6 +26,8 @@ exports.translateJson = async (req, res) => {
 
 			done: false,
 
+			createdAt: Date.now(),
+
 			translatedFile,
 
 			notFoundFile,
@@ -39,6 +41,10 @@ exports.translateJson = async (req, res) => {
 			console.log(error);
 			progressStore[jobId].error = error.message;
 			progressStore[jobId].done = true;
+			progressStore[jobId].completedAt = Date.now();
+			setTimeout(() => {
+				delete progressStore[jobId];
+			}, 10 * 60 * 1000);
 		});
 
 		res.json({

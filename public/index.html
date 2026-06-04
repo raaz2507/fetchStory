@@ -1,162 +1,190 @@
 <!doctype html>
 <html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Story Scraper</title>
-    <link rel="stylesheet" href="./style.css">
-</head>
-<body>
-    <button
-        id="controlPanelToggle"
-        class="controlPanelToggle"
-        type="button"
-        aria-controls="controlPanel"
-        aria-expanded="false"
-        title="Mobile controls show/hide kare.">
-        Controls
-    </button>
-    <button
-        id="summaryPanelToggle"
-        class="summaryPanelToggle"
-        type="button"
-        aria-controls="summaryPanel"
-        aria-expanded="false"
-        title="Mobile progress aur metadata show/hide kare.">
-        Status
-    </button>
-    <main class="dashboard">
-        <aside id="controlPanel" class="controlPanel" aria-label="Story controls" title="Story fetch aur JSON tools ka main control panel.">
-            <header class="panelHeader" title="Is dashboard se story fetch, JSON upload, images process, aur ZIP download kar sakte hain.">
-                <h1 title="Story Scraper dashboard">Story Scraper</h1>
-                <p title="Fetch, update, translate, and package story JSON.">Fetch, update, translate, and package story JSON.</p>
-                <output id="progressText" class="panelStatus" title="Current overall status message.">0%</output>
-            </header>
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Story Scraper</title>
+		<link rel="stylesheet" href="./style.css" />
+	</head>
+	<body>
+		<button id="controlPanelToggle" class="controlPanelToggle" type="button" aria-controls="controlPanel" aria-expanded="false" title="Mobile controls show/hide kare.">Controls</button>
+		<button id="summaryPanelToggle" class="summaryPanelToggle" type="button" aria-controls="summaryPanel" aria-expanded="false" title="Mobile progress aur metadata show/hide kare.">Status</button>
+		<section id="stickyStatusBar" class="stickyStatusBar" aria-label="Current job status" title="Current active job ka compact status.">
+			<div>
+				<strong id="stickyStatusLabel">Idle</strong>
+				<span id="stickyStatusDetail">Fetch story or insert JSON to begin.</span>
+			</div>
+			<progress id="stickyProgressBar" value="0" max="100" title="Active job progress."></progress>
+		</section>
+		<main class="dashboard">
+			<aside id="controlPanel" class="controlPanel" aria-label="Story controls" title="Story fetch aur JSON tools ka main control panel.">
+				<header class="panelHeader" title="Is dashboard se story fetch, JSON upload, images process, aur ZIP download kar sakte hain.">
+					<h1 title="Story Scraper dashboard">Story Scraper</h1>
+					<p title="Fetch, update, translate, and package story JSON.">Fetch, update, translate, and package story JSON.</p>
+					<output id="progressText" class="panelStatus" title="Current overall status message.">0%</output>
+				</header>
 
-            <section class="panelSection" title="Story source details yahan set karein.">
-                <h2 title="URL aur author settings">Source</h2>
-                <div class="fieldGroup" title="Jis story/thread ko fetch karna hai uska URL.">
-                    <label for="urlInput" title="Story/thread ka full URL.">Story URL</label>
-                    <input
-                        type="text"
-                        id="urlInput"
-                        placeholder="https://example.com/thread/"
-                        value="https://exforum.live/threads/teacher-mummys-aur-average-student-adultery-incest.154843/"
-                        title="Yahan story/thread URL paste karein. Get Meta ya Fetch Story isi URL se chalega.">
-                </div>
-                <div class="fieldGroup" title="Author name se sirf us writer ke posts fetch honge.">
-                    <label for="authorName" title="Writer/author ka exact name.">Author Name</label>
-                    <input type="text" id="authorName" placeholder="Author Name" value="ApkiApeksha" title="Author name manually daalein, ya Get Meta se auto-fill ho sakta hai.">
-                </div>
-                <div class="splitFields pageRange" title="Fetch range set karein. Empty chhodne par default range use hogi.">
-                    <div class="fieldGroup" title="Kis page se fetch start karna hai.">
-                        <label for="startPage" title="Starting page number.">Start Page</label>
-                        <input type="number" name="startPage" id="startPage" placeholder="1" value="" min="1" title="Start page number. Empty rakhen to page 1 se start hoga.">
-                    </div>
-                    <div class="fieldGroup" title="Kis page tak fetch karna hai.">
-                        <label for="endPage" title="Ending page number.">End Page</label>
-                        <input type="number" name="endPage" id="endPage" placeholder="Last" value="" min="1" title="End page number. Empty rakhen to detected last page tak fetch hoga.">
-                    </div>
-                </div>
-            </section>
+				<section class="panelSection jobCard" aria-label="JSON job summary" title="Uploaded/fetched JSON job ka quick summary.">
+					<div class="jobCardHeader">
+						<h2 title="Current JSON job">Current Job</h2>
+						<span id="jobStatusPill" class="statusPill" title="Current job state.">Idle</span>
+					</div>
+					<dl class="jobFacts">
+						<div><dt>Story</dt><dd id="jobStoryName">-</dd></div>
+						<div><dt>Posts</dt><dd id="jobPostsCount">0</dd></div>
+						<div><dt>Images</dt><dd id="jobImagesCount">0</dd></div>
+						<div><dt>Downloads</dt><dd id="jobDownloadsCount">0</dd></div>
+					</dl>
+				</section>
 
-            <section class="panelSection" title="Fetch behavior aur display settings.">
-                <h2 title="Fetch options">Options</h2>
-                <label class="toggleRow" for="loadImages" title="Checked hone par images download hongi aur JSON me local image path set hoga.">
-                    <span title="Images ko offline package ke liye download kare.">Load Images</span>
-                    <input type="checkbox" id="loadImages" checked title="On: images download. Off: text fast fetch, images remote/local source par depend karengi.">
-                </label>
-                <label class="toggleRow" for="appendFromJson" title="Uploaded/existing JSON me naye posts append kare. Duplicate avoid karne ki koshish hoti hai.">
-                    <span title="Existing JSON se resume/append mode.">Append JSON</span>
-                    <input type="checkbox" id="appendFromJson" title="On: existing JSON ke last page/post se continue. Off: fresh fetch.">
-                </label>
-                <div class="fieldGroup" title="Dashboard theme change karein.">
-                    <label for="themeSelect" title="Light ya dark theme choose karein.">Theme</label>
-                    <select id="themeSelect" title="Dashboard color theme select karein.">
-                        <option value="light" title="Light dashboard theme">Light</option>
-                        <option value="dark" title="Dark dashboard theme">Dark</option>
-                    </select>
-                </div>
-            </section>
+				<section class="panelSection" title="Story source details yahan set karein.">
+					<h2 title="URL aur author settings">Source</h2>
+					<div class="fieldGroup" title="Jis story/thread ko fetch karna hai uska URL.">
+						<label for="urlInput" title="Story/thread ka full URL.">Story URL</label>
+						<input type="text" id="urlInput" placeholder="https://example.com/thread/" value="https://exforum.live/threads/teacher-mummys-aur-average-student-adultery-incest.154843/" title="Yahan story/thread URL paste karein. Get Meta ya Fetch Story isi URL se chalega." />
+					</div>
+					<div class="fieldGroup" title="Author name se sirf us writer ke posts fetch honge.">
+						<label for="authorName" title="Writer/author ka exact name.">Author Name</label>
+						<input type="text" id="authorName" placeholder="Author Name"  title="Author name manually daalein, ya Get Meta se auto-fill ho sakta hai." />
+					</div>
+					<div class="splitFields pageRange" title="Fetch range set karein. Empty chhodne par default range use hogi.">
+						<div class="fieldGroup" title="Kis page se fetch start karna hai.">
+							<label for="startPage" title="Starting page number.">Start Page</label>
+							<input type="number" name="startPage" id="startPage" placeholder="1" value="" min="1" title="Start page number. Empty rakhen to page 1 se start hoga." />
+						</div>
+						<div class="fieldGroup" title="Kis page tak fetch karna hai.">
+							<label for="endPage" title="Ending page number.">End Page</label>
+							<input type="number" name="endPage" id="endPage" placeholder="Last" value="" min="1" title="End page number. Empty rakhen to detected last page tak fetch hoga." />
+						</div>
+					</div>
+				</section>
 
-            <section class="panelSection" title="Main actions yahan se run karein.">
-                <h2 title="Upload, fetch, download aur reader actions">Actions</h2>
-                <input type="file" id="jsonUploadInput" accept=".json,application/json" hidden title="Story JSON file select karein.">
-                <div class="actionGroups" title="Dashboard commands">
-                    <div class="actionGroup" title="Uploaded/existing JSON ke tools.">
-                        <h3 title="JSON upload aur image processing tools">JSON Tools</h3>
-                        <div class="actionGrid">
-                            <button id="insertJsonBtn" type="button" title="Existing story JSON upload karein aur fields auto-fill karein.">Insert JSON</button>
-                            <button id="processUploadedImagesBtn" type="button" title="Uploaded JSON ke remote/original image links se images download karke JSON ko offline-ready banaye.">Process Images</button>
-                        </div>
-                    </div>
+				<section class="panelSection" title="Fetch behavior aur display settings.">
+					<h2 title="Fetch options">Options</h2>
+					<label class="toggleRow" for="loadImages" title="Checked hone par images download hongi aur JSON me local image path set hoga.">
+						<span title="Images ko offline package ke liye download kare.">Load Images</span>
+						<input type="checkbox" id="loadImages" checked title="On: images download. Off: text fast fetch, images remote/local source par depend karengi." />
+					</label>
+					<label class="toggleRow" for="appendFromJson" title="Uploaded/existing JSON me naye posts append kare. Duplicate avoid karne ki koshish hoti hai.">
+						<span title="Existing JSON se resume/append mode.">Append JSON</span>
+						<input type="checkbox" id="appendFromJson" title="On: existing JSON ke last page/post se continue. Off: fresh fetch." />
+					</label>
+					<div class="fieldGroup" title="Dashboard theme change karein.">
+						<label for="themeSelect" title="Light ya dark theme choose karein.">Theme</label>
+						<select id="themeSelect" title="Dashboard color theme select karein.">
+							<option value="light" title="Light dashboard theme">Light</option>
+							<option value="dark" title="Dark dashboard theme">Dark</option>
+						</select>
+					</div>
+				</section>
 
-                    <div class="actionGroup" title="Live story fetch controls.">
-                        <h3 title="Story metadata aur fetch commands">Fetch Controls</h3>
-                        <div class="actionGrid">
-                            <button id="getMeta" type="button" title="URL se story title, author aur total pages detect kare.">Get Meta</button>
-                            <button id="fetchBtn" type="button" class="primaryAction" title="Selected URL/range/options ke saath story fetch start kare.">Fetch Story</button>
-                            <button id="cancelFetchBtn" type="button" disabled title="Running fetch ko cancel kare.">Cancel Fetch</button>
-                        </div>
-                    </div>
+				<section class="panelSection" title="Main actions yahan se run karein.">
+					<h2 title="Upload, fetch, download aur reader actions">Actions</h2>
+					<input type="file" id="jsonUploadInput" accept=".json,application/json" hidden title="Story JSON file select karein." />
+					<div class="actionGroups" title="Dashboard commands">
+						<div class="actionGroup" title="Uploaded/existing JSON ke tools.">
+							<h3 title="JSON upload aur image processing tools">JSON Tools</h3>
+							<div class="actionGrid">
+								<button id="insertJsonBtn" type="button" title="Existing story JSON upload karein aur fields auto-fill karein.">Insert JSON</button>
+								<button id="processUploadedImagesBtn" type="button" title="Uploaded JSON ke remote/original image links se images download karke JSON ko offline-ready banaye.">Process Images</button>
+							</div>
+						</div>
 
-                    <div class="actionGroup" title="Download, reader aur cache actions.">
-                        <h3 title="Final output aur browser cache tools">Output</h3>
-                        <div class="actionGrid">
-                            <button id="downloadBtn" type="button" title="Current story JSON aur images folder ko ZIP me download kare.">Download ZIP</button>
-                            <button id="openReaderBtn" type="button" title="Reader page open kare, jahan JSON read/translate ki ja sakti hai.">Open Reader</button>
-                            <button id="loadFromCache" type="button" title="Browser cache se last preview/status restore kare.">Load Cache</button>
-                            <button id="clearCache" type="button" title="Browser cache me saved preview/status clear kare.">Clear Cache</button>
-                        </div>
-                    </div>
-                </div>
-            </section>
-        </aside>
+						<div class="actionGroup" title="Live story fetch controls.">
+							<h3 title="Story metadata aur fetch commands">Fetch Controls</h3>
+							<div class="actionGrid">
+								<button id="getMeta" type="button" title="URL se story title, author aur total pages detect kare.">Get Meta</button>
+								<button id="fetchBtn" type="button" class="primaryAction" title="Selected URL/range/options ke saath story fetch start kare.">Fetch Story</button>
+								<button id="cancelFetchBtn" type="button" disabled title="Running fetch ko cancel kare.">Cancel Fetch</button>
+							</div>
+						</div>
 
-        <section class="workArea" title="Story preview, progress aur metadata display area.">
-            <header class="statusHeader" title="Current story title aur quick stats.">
-                <div title="Currently loaded/fetched story ka naam.">
-                    <span class="eyebrow" title="Current story section">Current Story</span>
-                    <h2 class="storyTitle" title="Story title yahan show hoga."></h2>
-                </div>
-                <div class="statsArea" id="statsText" title="Fetched posts aur image download/skipped count.">Posts: 0 | Images: 0 downloaded, 0 skipped</div>
-            </header>
+						<div class="actionGroup" title="Download, reader aur cache actions.">
+							<h3 title="Final output aur browser cache tools">Output</h3>
+							<div class="actionGrid">
+								<button id="downloadBtn" type="button" title="Current story JSON aur images folder ko ZIP me download kare.">Download ZIP</button>
+								<button id="openReaderBtn" type="button" title="Reader page open kare, jahan JSON read/translate ki ja sakti hai.">Open Reader</button>
+								<button id="loadFromCache" type="button" title="Browser cache se last preview/status restore kare.">Load Cache</button>
+								<button id="clearCache" type="button" title="Browser cache me saved preview/status clear kare.">Clear Cache</button>
+							</div>
+						</div>
+					</div>
+				</section>
+			</aside>
 
-            <section id="summaryPanel" class="summaryPanel" title="Left side progress aur right side story metadata.">
-                <section class="progressPanel" aria-label="Fetch progress" title="Overall, page aur image progress yahan update hota hai.">
-                    <div class="progressBarArea" title="Complete fetch progress.">
-                        <label for="progressBar" title="Overall fetch progress">Overall</label>
-                        <progress id="progressBar" value="0" max="100" title="Overall story fetch percentage."></progress>
-                    </div>
-                    <div class="progressBarArea" title="Current page processing progress.">
-                        <label for="pageProgressBar" title="Current page progress">Page</label>
-                        <progress id="pageProgressBar" value="0" max="100" title="Current page parse/process percentage."></progress>
-                        <output id="pageProgressText" title="Current page status percentage.">0%</output>
-                    </div>
-                    <div class="progressBarArea" title="Current post/image download progress.">
-                        <label for="imageProgressBar" title="Image download progress">Image</label>
-                        <progress id="imageProgressBar" value="0" max="100" title="Current image download percentage."></progress>
-                        <output id="imageProgressText" title="Current image download status.">0%</output>
-                    </div>
-                </section>
+			<section class="workArea" title="Story preview, progress aur metadata display area.">
+				<header class="statusHeader" title="Current story title aur quick stats.">
+					<div title="Currently loaded/fetched story ka naam.">
+						<span class="eyebrow" title="Current story section">Current Story</span>
+						<h2 class="storyTitle" title="Story title yahan show hoga."></h2>
+					</div>
+					<div class="statsArea" id="statsText" title="Fetched posts aur image download/skipped count.">Posts: 0 | Images: 0 downloaded, 0 skipped</div>
+				</header>
 
-                <section class="storyMetaArea" id="storyMetaArea" aria-label="Story metadata" title="Story JSON metadata summary.">
-                    <span title="Last time story JSON was fetched or updated.">Last Fetch: -</span>
-                    <span title="Total image tags detected in story posts.">Total Images: 0</span>
-                    <span title="Images successfully downloaded locally.">Image Downloads: 0</span>
-                    <span title="Fetch start time.">Start: -</span>
-                    <span title="Fetch end/cancel/completion time.">End: -</span>
-                    <span title="Total duration taken for fetch.">Duration: -</span>
-                    <span title="Last page number reached by program.">Last Page: 0</span>
-                </section>
-            </section>
+				<section id="summaryPanel" class="summaryPanel" title="Left side progress aur right side story metadata.">
+					<section class="progressPanel" aria-label="Fetch progress" title="Overall, page aur image progress yahan update hota hai.">
+						<ol id="statusTimeline" class="statusTimeline" title="Current workflow step timeline.">
+							<li data-step="uploaded" class="is-current">Uploaded</li>
+							<li data-step="scanning">Scanning</li>
+							<li data-step="downloading">Downloading</li>
+							<li data-step="updating">Updating JSON</li>
+							<li data-step="ready">Ready</li>
+						</ol>
+						<div class="progressBarArea" title="Complete fetch progress.">
+							<label for="progressBar" title="Overall fetch progress">Overall</label>
+							<progress id="progressBar" value="0" max="100" title="Overall story fetch percentage."></progress>
+							<output id="overallProgressText" title="Overall progress details.">0%</output>
+						</div>
+						<div class="progressBarArea" title="Current page processing progress.">
+							<label for="pageProgressBar" title="Current page progress">Page</label>
+							<progress id="pageProgressBar" value="0" max="100" title="Current page parse/process percentage."></progress>
+							<output id="pageProgressText" title="Current page status percentage.">0%</output>
+						</div>
+						<div class="progressBarArea" title="Current post/image download progress.">
+							<label for="imageProgressBar" title="Image download progress">Image</label>
+							<progress id="imageProgressBar" value="0" max="100" title="Current image download percentage."></progress>
+							<output id="imageProgressText" title="Current image download status.">0%</output>
+						</div>
+					</section>
 
-            <section class="contentArea" title="Fetched/uploaded story post preview.">
-                <article id="content" title="Story content preview. Scroll karne par saved pages load ho sakte hain."></article>
-            </section>
-        </section>
-    </main>
+					<section class="storyMetaArea" id="storyMetaArea" aria-label="Story metadata" title="Story JSON metadata summary.">
+						<span title="Last time story JSON was fetched or updated.">Last Fetch: -</span>
+						<span title="Total image tags detected in story posts.">Total Images: 0</span>
+						<span title="Images successfully downloaded locally.">Image Downloads: 0</span>
+						<span title="Fetch start time.">Start: -</span>
+						<span title="Fetch end/cancel/completion time.">End: -</span>
+						<span title="Total duration taken for fetch.">Duration: -</span>
+						<span title="Last page number reached by program.">Last Page: 0</span>
+					</section>
 
-    <script src="script.js"></script>
-</body>
+					<details id="warningPanel" class="warningPanel" title="Skipped image aur warning summary.">
+						<summary><span id="warningSummary">Warnings: 0</span></summary>
+						<ul id="warningList"></ul>
+					</details>
+				</section>
+
+				<section class="contentArea" title="Fetched/uploaded story post preview.">
+					<div class="previewToolbar" aria-label="Preview toolbar" title="Story preview controls.">
+						<div class="previewModes" role="group" aria-label="Post display mode">
+							<button id="showAllPostsBtn" type="button" class="is-active" title="All posts preview me show kare.">All</button>
+							<button id="showFirstPostsBtn" type="button" title="Sirf first 10 posts show kare.">First 10</button>
+						</div>
+						<label class="toolbarToggle" for="togglePreviewImages" title="Preview images show/hide kare.">
+							<span>Images</span>
+							<input type="checkbox" id="togglePreviewImages" checked />
+						</label>
+						<input id="postSearchInput" type="search" placeholder="Search posts" title="Loaded posts ke text me search kare." />
+						<button id="scrollLatestBtn" type="button" title="Latest loaded/processed post par scroll kare.">Latest</button>
+					</div>
+					<article id="content" title="Story content preview. Scroll karne par saved pages load ho sakte hain."></article>
+					<div id="emptyState" class="emptyState" title="No story loaded.">
+						<h2>Ready for a story</h2>
+						<p>Fetch a story or insert JSON to begin.</p>
+					</div>
+				</section>
+			</section>
+		</main>
+
+		<script src="script.js"></script>
+	</body>
 </html>

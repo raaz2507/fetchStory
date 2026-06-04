@@ -1,6 +1,7 @@
 const path = require("path");
 const fs = require("fs");
 const fsAsync = require("fs").promises;
+const crypto = require("crypto");
 
 const { sanitizeFolderName } = require("../utils/fileUtils");
 const {
@@ -9,14 +10,16 @@ const {
 } = require("../services/scraperService");
 const { createZip } = require("../services/exportService");
 const { processStoryJsonImages } = require("../services/jsonImageProcessorService");
+const { logMemory } = require("../utils/logger");
 
 exports.downloadStory = async (req, res) => {
     try {
         const { title = "story" } = req.body;
+        const jobId = getValidJobId(req.body && req.body.jobId);
 
         const safeTitle = sanitizeFolderName(title) || "story";
         const downloadsFolder = path.join(__dirname, "..", "downloads");
-        const baseFolder = path.join(downloadsFolder, safeTitle);
+        const baseFolder = path.join(downloadsFolder, `${safeTitle}-${jobId}`);
         const imageFolder = path.join(baseFolder, "images");
 
         // 1. सुनिश्चित करें कि मुख्य downloads फोल्डर मौजूद हो
@@ -31,18 +34,17 @@ exports.downloadStory = async (req, res) => {
         fs.mkdirSync(imageFolder, { recursive: true });
 
         // 2. Temp फोल्डर से असली इमेजेस को डाउनलोड फोल्डर में कॉपी करें
-        const tempFolder = path.join(__dirname, "..", "temp");
+        const tempFolder = getJobFolder(jobId);
         const tempImagePath = path.join(tempFolder, "images");
 
         if (fs.existsSync(tempImagePath)) {
             const images = fs.readdirSync(tempImagePath);
-            const copyPromises = images.map((img) => {
-                return fsAsync.copyFile(
+            await copyFilesInBatches(images, 10, async (img) => {
+                await fsAsync.copyFile(
                     path.join(tempImagePath, img),
-                    path.join(imageFolder, img),
+                    path.join(imageFolder, img)
                 );
             });
-            await Promise.all(copyPromises);
         }
 
         // 3. Temp में बनी लाइव 'story_data.json' को पढ़ें और कॉपी करें
@@ -54,10 +56,9 @@ exports.downloadStory = async (req, res) => {
         }
 
         let originalJsonContent = fs.readFileSync(sourceJsonPath, "utf8");
-        originalJsonContent = originalJsonContent.replace(
-            /\/temp\/images\//g,
-            "images/",
-        );
+        originalJsonContent = originalJsonContent
+            .replace(new RegExp(`/temp/jobs/${escapeRegExp(jobId)}/images/`, "g"), "images/")
+            .replace(/\/temp\/images\//g, "images/");
         fs.writeFileSync(
             path.join(baseFolder, "story_data.json"),
             originalJsonContent,
@@ -67,7 +68,7 @@ exports.downloadStory = async (req, res) => {
         // टाइटल को डायनामिकली रिप्लेस कर दें
         // इसे यूज़र के स्पेसिफिक डाउनलोड फ़ोल्डर में 'index.html' नाम से सेव कर दें
         // 5. ज़िप फ़ाइल का निर्माण और ट्रांसफर
-        const zipPath = path.join(downloadsFolder, `${safeTitle}.zip`);
+        const zipPath = path.join(downloadsFolder, `${safeTitle}-${jobId}.zip`);
         console.log("Creating zip archive...");
 
         await createZip(baseFolder, zipPath);
@@ -96,7 +97,7 @@ exports.downloadStory = async (req, res) => {
     } catch (err) {
         console.error("Download Error:", err);
         if (!res.headersSent) {
-            res.status(500).send("Download failed: " + err.message);
+            res.status(err.statusCode || 500).send("Download failed: " + err.message);
         }
     }
 };
@@ -118,7 +119,8 @@ exports.uploadStoryJson = async (req, res) => {
             return res.status(400).json({ error: "Valid JSON story data missing" });
         }
 
-        const tempFolder = path.join(__dirname, "..", "temp");
+        const jobId = createJobId();
+        const tempFolder = getJobFolder(jobId);
         const imagesPath = path.join(tempFolder, "images");
         const jsonFilePath = path.join(tempFolder, "story_data.json");
 
@@ -129,6 +131,7 @@ exports.uploadStoryJson = async (req, res) => {
 
         res.json({
             ok: true,
+            jobId,
             storyData,
             meta: createStorySummary(storyData),
         });
@@ -140,7 +143,8 @@ exports.uploadStoryJson = async (req, res) => {
 
 exports.processUploadedStoryImages = async (req, res) => {
     try {
-        const tempFolder = path.join(__dirname, "..", "temp");
+        const jobId = getValidJobId(req.body && req.body.jobId);
+        const tempFolder = getJobFolder(jobId);
         const imagesPath = path.join(tempFolder, "images");
         const jsonFilePath = path.join(tempFolder, "story_data.json");
 
@@ -159,13 +163,74 @@ exports.processUploadedStoryImages = async (req, res) => {
 
         res.json({
             ok: true,
+            jobId,
             storyData: result.storyData,
             meta: createStorySummary(result.storyData),
             stats: result.stats,
         });
     } catch (err) {
         console.error("Uploaded JSON image processing error:", err);
-        res.status(500).json({ error: "Image processing failed: " + err.message });
+        res.status(err.statusCode || 500).json({ error: "Image processing failed: " + err.message });
+    }
+};
+
+exports.streamUploadedStoryImages = async (req, res) => {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+
+    const controller = new AbortController();
+    res.on("error", (err) => {
+        console.error("Uploaded image stream response error:", err.message);
+        controller.abort();
+    });
+    req.on("close", () => {
+        controller.abort();
+    });
+
+    try {
+        const jobId = getValidJobId(req.query && req.query.jobId);
+        const tempFolder = getJobFolder(jobId);
+        const imagesPath = path.join(tempFolder, "images");
+        const jsonFilePath = path.join(tempFolder, "story_data.json");
+
+        if (!fs.existsSync(jsonFilePath)) {
+            writeSseEvent(res, { error: "Upload JSON first", jobId }, controller);
+            return res.end();
+        }
+
+        fs.mkdirSync(imagesPath, { recursive: true });
+
+        const storyData = normalizeStoryData(
+            JSON.parse(fs.readFileSync(jsonFilePath, "utf8"))
+        );
+        const result = await processStoryJsonImages(
+            storyData,
+            tempFolder,
+            (progressData) => {
+                if (controller.signal.aborted) return;
+                writeSseEvent(res, { ...progressData, jobId }, controller);
+            },
+            { signal: controller.signal }
+        );
+
+        writeStoryDataFile(jsonFilePath, result.storyData);
+
+        if (writeSseEvent(res, {
+            done: true,
+            jobId,
+            storyData: result.storyData,
+            meta: createStorySummary(result.storyData),
+            stats: result.stats,
+        }, controller)) {
+            res.end();
+        }
+    } catch (err) {
+        console.error("Uploaded JSON image processing stream error:", err);
+        if (writeSseEvent(res, { error: "Image processing failed: " + err.message }, controller)) {
+            res.end();
+        }
     }
 };
 
@@ -191,8 +256,10 @@ exports.streamStory = async (req, res) => {
     const endPage = parsePositiveInteger(req.query.endPage) || 0;
     const loadImages = req.query.loadImages !== "0";
     const appendMode = req.query.append === "1";
+    const requestedJobId = req.query.jobId ? getValidJobId(req.query.jobId) : "";
+    const jobId = appendMode && requestedJobId ? requestedJobId : createJobId();
 
-    const tempFolder = path.join(__dirname, "..", "temp");
+    const tempFolder = getJobFolder(jobId);
     const imagesPath = path.join(tempFolder, "images");
     const jsonFilePath = path.join(tempFolder, "story_data.json");
     const startedAt = new Date();
@@ -208,7 +275,7 @@ exports.streamStory = async (req, res) => {
         if (effectiveAppendMode) {
             fs.mkdirSync(imagesPath, { recursive: true });
         } else {
-            cleanTempFolder();
+            cleanTempFolder(tempFolder);
         }
 
         // 3. JSON का शुरुआती ढांचा आपके नए फॉर्मेट (eng और hindi) के अनुसार सेट किया
@@ -222,6 +289,7 @@ exports.streamStory = async (req, res) => {
         let liveStoryJson = storyObj;
 
         console.log("Starting scraper for URL:", url);
+        logMemory("story stream started");
         const postNumberMap = new Map();
         const postImageCountMap = new Map();
         const knownPostNumbers = new Set(Object.keys(storyObj.posts.eng));
@@ -317,6 +385,7 @@ exports.streamStory = async (req, res) => {
                 }
 
                 // फ्रंटएंड को लाइव डेटा भेजें
+                if (progressData) progressData.jobId = jobId;
                 writeSseEvent(res, progressData, controller);
             },
             {
@@ -324,14 +393,16 @@ exports.streamStory = async (req, res) => {
                 endPage,
                 loadImages,
                 signal: controller.signal,
+                publicBasePath: `/temp/jobs/${jobId}`,
             }
         );
 
         // 5. काम पूरा होने पर 'done' भेजें
         flushStoryJson(writeStoryJson);
         const finalStoryData = safeFinalizeStoryDataFile(jsonFilePath, url, author, startedAt);
+        logMemory("story stream completed");
 
-        if (writeSseEvent(res, { done: true, meta: createStorySummary(finalStoryData) }, controller)) {
+        if (writeSseEvent(res, { done: true, jobId, meta: createStorySummary(finalStoryData) }, controller)) {
             res.end();
         }
     } catch (err) {
@@ -340,8 +411,9 @@ exports.streamStory = async (req, res) => {
         console.error("=== CRITICAL SCRAPER ERROR ===");
         console.error(err);
         console.error("==============================");
+        logMemory("story stream failed", "warn");
 
-        if (writeSseEvent(res, { error: getClientErrorMessage(err) }, controller)) {
+        if (writeSseEvent(res, { error: getClientErrorMessage(err), jobId }, controller)) {
             res.end();
         }
     }
@@ -350,7 +422,8 @@ exports.streamStory = async (req, res) => {
 exports.getSinglePage = async (req, res) => {
     try {
         const pageNum = Number(req.query.page) || 1;
-        const jsonFilePath = path.join(__dirname, "..", "temp", "story_data.json");
+        const jobId = getValidJobId(req.query.jobId);
+        const jsonFilePath = path.join(getJobFolder(jobId), "story_data.json");
 
         if (!fs.existsSync(jsonFilePath)) {
             return res
@@ -372,12 +445,7 @@ exports.getSinglePage = async (req, res) => {
         let pageHtml = fileContent.posts.eng[pageNum];
 
         // इमेज पाथ फिक्सिंग (लाइव स्ट्रीमिंग रीडर के लिए)
-        if (
-            !pageHtml.includes("/temp/images/") &&
-            pageHtml.includes('src="images/')
-        ) {
-            pageHtml = pageHtml.replace(/src="images\//g, 'src="/temp/images/');
-        }
+        pageHtml = fixJobImagePaths(pageHtml, jobId);
 
         const hasNextPage =
             !!fileContent.posts.eng[pageNum + 1] ||
@@ -395,7 +463,7 @@ exports.getSinglePage = async (req, res) => {
         pageHtml = null;
     } catch (err) {
         console.error("Error in getSinglePage:", err);
-        res.status(500).json({ error: "Error fetching page from server" });
+        res.status(err.statusCode || 500).json({ error: err.statusCode ? err.message : "Error fetching page from server" });
     }
 };
 
@@ -406,8 +474,7 @@ function logMemoryUsage(page) {
     );
 }
 
-function cleanTempFolder() {
-    const tempPath = path.join(__dirname, "..", "temp");
+function cleanTempFolder(tempPath) {
     const imagesPath = path.join(tempPath, "images");
     const jsonFilePath = path.join(tempPath, "story_data.json");
 
@@ -428,6 +495,45 @@ function cleanTempFolder() {
             "Warning: Could not delete old temp files, skipping clean up:",
             err.message,
         );
+    }
+}
+
+function fixJobImagePaths(html, jobId) {
+    if (typeof html !== "string") return "";
+    const jobImagePath = `/temp/jobs/${jobId}/images/`;
+
+    return html
+        .replace(/src="\/temp\/images\//g, `src="${jobImagePath}`)
+        .replace(/src="images\//g, `src="${jobImagePath}`)
+        .replace(/src="\.\/images\//g, `src="${jobImagePath}`);
+}
+
+function createJobId() {
+    return crypto.randomUUID();
+}
+
+function getValidJobId(value) {
+    const jobId = String(value || "").trim();
+    if (!/^[a-f0-9-]{36}$/i.test(jobId)) {
+        const err = new Error("Valid jobId missing");
+        err.statusCode = 400;
+        throw err;
+    }
+    return jobId;
+}
+
+function getJobFolder(jobId) {
+    return path.join(__dirname, "..", "temp", "jobs", jobId);
+}
+
+function escapeRegExp(value) {
+    return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+async function copyFilesInBatches(items, batchSize, worker) {
+    for (let index = 0; index < items.length; index += batchSize) {
+        const batch = items.slice(index, index + batchSize);
+        await Promise.all(batch.map(worker));
     }
 }
 

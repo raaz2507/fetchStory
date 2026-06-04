@@ -90,6 +90,10 @@ async function processTranslation(storyData, jobId, expectedChecksum) {
 	progressStore[jobId].notFoundFile = result.notFoundUrl;
 	progressStore[jobId].message = "Translation complete";
 	progressStore[jobId].done = true;
+	progressStore[jobId].completedAt = Date.now();
+	setTimeout(() => {
+		delete progressStore[jobId];
+	}, 10 * 60 * 1000);
 
 	console.log(`[translator:${jobId}] Translation complete`);
 

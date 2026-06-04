@@ -5,7 +5,7 @@ const {
     getDomainConfig,
     recordUnsupportedDomain,
 } = require("./domainService");
-const { downloadImageWithHash, resetImageCache } = require("./imageService");
+const { createImageCache, downloadImageWithHash } = require("./imageService");
 
 async function getStoryMeta(originalURL) {
     const baseURL = getValidatedBaseURL(originalURL);
@@ -27,9 +27,10 @@ async function scrapeStoryWithImages(originalURL, authorName, baseFolder, progre
     const endPage = options.endPage || 0;
     const loadImages = options.loadImages !== false;
     const signal = options.signal;
+    const publicBasePath = options.publicBasePath || "/temp";
 
     throwIfCancelled(signal);
-    resetImageCache();
+    const imageCache = createImageCache();
 
     const $firstPage = await fetchRequiredPage(baseURL, signal);
     const title = getTitle($firstPage, site.config);
@@ -87,7 +88,8 @@ async function scrapeStoryWithImages(originalURL, authorName, baseFolder, progre
                             stats.imagePercent = getAveragePercent(imageProgressValues);
 
                             sendProgress(progressCallback, currentPage, firstPage, lastPage, totalPagesToFetch, null, title, stats);
-                        }
+                        },
+                        imageCache
                     );
                     const localPath = imageResult && imageResult.localPath;
 
@@ -97,7 +99,7 @@ async function scrapeStoryWithImages(originalURL, authorName, baseFolder, progre
                         } else if (imageResult.wasDuplicate) {
                             stats.skippedImages++;
                         }
-                        $content(img).attr("src", `/temp/${localPath}`);
+                        $content(img).attr("src", `${publicBasePath}/${localPath}`);
                     } else {
                         stats.skippedImages++;
                     }
