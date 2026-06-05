@@ -141,6 +141,33 @@ exports.uploadStoryJson = async (req, res) => {
     }
 };
 
+exports.cleanUploadedStoryJson = async (req, res) => {
+    try {
+        const jobId = getValidJobId(req.body && req.body.jobId);
+        const tempFolder = getJobFolder(jobId);
+        const jsonFilePath = path.join(tempFolder, "story_data.json");
+
+        if (!fs.existsSync(jsonFilePath)) {
+            return res.status(404).json({ error: "Upload JSON first" });
+        }
+
+        const storyData = normalizeStoryData(
+            JSON.parse(fs.readFileSync(jsonFilePath, "utf8"))
+        );
+        writeStoryDataFile(jsonFilePath, storyData);
+
+        res.json({
+            ok: true,
+            jobId,
+            storyData,
+            meta: createStorySummary(storyData),
+        });
+    } catch (err) {
+        console.error("Uploaded JSON clean error:", err);
+        res.status(err.statusCode || 500).json({ error: "JSON clean failed: " + err.message });
+    }
+};
+
 exports.processUploadedStoryImages = async (req, res) => {
     try {
         const jobId = getValidJobId(req.body && req.body.jobId);
@@ -558,11 +585,17 @@ function createStoryDataShell(url, author, startedAt) {
 }
 
 function normalizeStoryData(storyData) {
+    const posts = storyData.posts || {};
+    const directEngPosts = Object.fromEntries(
+        Object.entries(posts).filter(([key, value]) => {
+            return /^\d+$/.test(key) && typeof value === "string";
+        })
+    );
     const normalized = {
         ...storyData,
         posts: {
-            eng: storyData.posts && storyData.posts.eng ? storyData.posts.eng : {},
-            hindi: storyData.posts && storyData.posts.hindi ? storyData.posts.hindi : {},
+            eng: posts.eng || directEngPosts,
+            hindi: posts.hindi || {},
         },
     };
 

@@ -381,8 +381,10 @@ function getSupportedSiteOrThrow(url) {
 }
 
 function getTitle($, config) {
-    const matches = $(config.titleSelector);
-    const titleNode = config.titleSelectorPosition === "last"
+    const titleSelector = config.title?.selector || config.titleSelector;
+    const titlePosition = config.title?.position || config.titleSelectorPosition;
+    const matches = $(titleSelector);
+    const titleNode = titlePosition === "last"
         ? matches.last()
         : matches.first();
 
@@ -390,12 +392,17 @@ function getTitle($, config) {
 }
 
 function getWriterName($, config) {
-    return $(config.writerNameSelector).first().text().trim();
+    const writerSelector = config.writer?.selector || config.writerNameSelector;
+    return $(writerSelector).first().text().trim();
 }
 
 function findWriterPostBodies($, writerName, config) {
     if (typeof config.customPostExtractor === "function") {
         return config.customPostExtractor($, writerName) || [];
+    }
+
+    if (config.posts) {
+        return extractPosts($, config, writerName);
     }
 
     const directMatches = $(config.postBodySelector(writerName)).toArray();
@@ -420,6 +427,53 @@ function findWriterPostBodies($, writerName, config) {
     });
 
     return fallbackMatches;
+}
+
+function extractPosts($, config, writerName) {
+    const posts = [];
+    const postConfig = config.posts;
+
+    $(postConfig.containerSelector).each((index, el) => {
+        const post = $(el);
+        const authorName = getPostAuthorName(post, postConfig);
+
+        if (normalizeName(authorName) !== normalizeName(writerName)) return;
+
+        let postId = post.attr(postConfig.idAttribute) || null;
+
+        if (postId && postConfig.idPrefix) {
+            postId = postId.replace(postConfig.idPrefix, "");
+        }
+
+        const bodyHTML = post.find(postConfig.bodySelector).first().html()?.trim();
+
+        if (!bodyHTML) return;
+
+        posts.push({
+            index: index + 1,
+            postId,
+            authorName,
+            bodyHTML,
+        });
+    });
+
+    return posts;
+}
+
+function getPostAuthorName(post, postConfig) {
+    if (postConfig.authorAttribute) {
+        return (post.attr(postConfig.authorAttribute) || "").trim();
+    }
+
+    return post
+        .find(postConfig.authorSelector)
+        .first()
+        .text()
+        .trim();
+}
+
+function normalizeName(name = "") {
+    return name.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
 async function fetchRequiredPage(url, signal) {
@@ -447,7 +501,8 @@ async function fetchPage(url, signal) {
 
 function getLastPage($, config) {
     let max = 1;
-    $(config.lastPageSelector).each((i, el) => {
+    const lastPageSelector = config.pagination?.lastPageSelector || config.lastPageSelector;
+    $(lastPageSelector).each((i, el) => {
         const num = parseInt($(el).text().trim(), 10);
         if (!Number.isNaN(num)) max = Math.max(max, num);
 

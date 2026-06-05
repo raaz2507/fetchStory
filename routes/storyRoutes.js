@@ -7,6 +7,7 @@ const {
     storyMeta,
     getSinglePage,
     uploadStoryJson,
+    cleanUploadedStoryJson,
     processUploadedStoryImages,
     streamUploadedStoryImages,
 } = require("../controllers/storyController");
@@ -15,6 +16,7 @@ router.get("/stream", streamStory); // फ्रंटएंड: /api/story/stre
 router.get("/meta", storyMeta);     // फ्रंटएंड: /api/story/meta
 router.post("/download", downloadStory);
 router.post("/upload-json", uploadStoryJson);
+router.post("/clean-uploaded-json", cleanUploadedStoryJson);
 router.post("/process-uploaded-images", processUploadedStoryImages);
 router.get("/process-uploaded-images-stream", streamUploadedStoryImages);
 

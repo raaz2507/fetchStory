@@ -36,6 +36,7 @@ const fetchBtn = document.getElementById("fetchBtn");
 const cancelFetchBtn = document.getElementById("cancelFetchBtn");
 const insertJsonBtn = document.getElementById("insertJsonBtn");
 const jsonUploadInput = document.getElementById("jsonUploadInput");
+const cleanUploadedJsonBtn = document.getElementById("cleanUploadedJsonBtn");
 const processUploadedImagesBtn = document.getElementById("processUploadedImagesBtn");
 const cacheKey = "storyScraper:lastStory";
 const idbName = "storyScraperDB";
@@ -193,6 +194,54 @@ jsonUploadInput.addEventListener("change", async () => {
         setStatus("Upload failed", err.message || "Invalid JSON file");
     } finally {
         jsonUploadInput.value = "";
+    }
+});
+
+cleanUploadedJsonBtn.addEventListener("click", async () => {
+    try {
+        if (!currentStoryJobId && !currentStoryData) {
+            setStatus("Upload JSON first", "Insert a JSON file before cleaning it.");
+            return;
+        }
+
+        closeActiveStream();
+        resetWarnings();
+        setWorkflowStep("updating");
+        setJobStatus("Cleaning", "active");
+        setStatus("Cleaning JSON", "Normalizing uploaded story data...");
+        cleanUploadedJsonBtn.disabled = true;
+        cleanUploadedJsonBtn.textContent = "Cleaning...";
+
+        if (currentStoryJobId) {
+            const response = await fetch("/api/story/clean-uploaded-json", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ jobId: currentStoryJobId }),
+            });
+            const result = await response.json();
+
+            if (!response.ok || result.error) {
+                throw new Error(result.error || "JSON clean failed");
+            }
+
+            applyStoryData(result.storyData);
+        } else {
+            applyStoryData(normalizeStoryData(currentStoryData));
+        }
+
+        setWorkflowStep("ready");
+        setJobStatus("Cleaned", "complete");
+        setStatus("JSON cleaned", "Story format normalized and preview updated.");
+        saveCache();
+    } catch (err) {
+        console.error(err);
+        setJobStatus("Error", "warning");
+        setStatus("JSON clean failed", err.message || "JSON clean failed");
+    } finally {
+        cleanUploadedJsonBtn.disabled = false;
+        cleanUploadedJsonBtn.textContent = "Clean JSON";
     }
 });
 
@@ -904,7 +953,12 @@ function applyStoryData(storyData, options = {}) {
 
 function normalizeStoryData(storyData) {
     const posts = storyData.posts || {};
-    const engPosts = posts.eng || {};
+    const directEngPosts = Object.fromEntries(
+        Object.entries(posts).filter(([key, value]) => {
+            return /^\d+$/.test(key) && typeof value === "string";
+        })
+    );
+    const engPosts = posts.eng || directEngPosts;
     const hindiPosts = posts.hindi || {};
     const postKeys = Object.keys(engPosts)
         .map((key) => Number.parseInt(key, 10))
@@ -1156,6 +1210,7 @@ function closeActiveStream() {
 
 function setFetchingState(isFetching) {
     fetchBtn.disabled = isFetching;
+    cleanUploadedJsonBtn.disabled = isFetching;
     cancelFetchBtn.disabled = !isFetching;
     cancelFetchBtn.textContent = activeOperation === "images" ? "Cancel Process" : "Cancel Fetch";
 }
