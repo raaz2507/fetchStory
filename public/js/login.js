@@ -36,6 +36,7 @@ async function submitAuth(url, successMessage) {
         message.textContent = "";
         const response = await fetch(url, {
             method: "POST",
+            credentials: "same-origin",
             headers: {
                 "Content-Type": "application/json",
             },
@@ -52,9 +53,20 @@ async function submitAuth(url, successMessage) {
 
         message.textContent = result.message || successMessage;
         if (url.endsWith("/login")) {
-            window.location.href = "/index.html";
+            window.location.href = getLoginRedirectUrl();
         }
     } catch (err) {
         message.textContent = err.message || "Request failed";
     }
+}
+
+function getLoginRedirectUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const nextUrl = params.get("next");
+
+    if (nextUrl && nextUrl.startsWith("/") && !nextUrl.startsWith("//")) {
+        return nextUrl;
+    }
+
+    return "/home";
 }

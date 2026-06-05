@@ -199,6 +199,12 @@
 	border-color: var(--danger);
 }
 
+.logout-btn {
+	color: #ffffff;
+	background: var(--danger);
+	border-color: var(--danger);
+}
+
 #jsonFile,
 .hide {
 	display: none !important;
@@ -377,6 +383,7 @@ h1.story-title {
 
 	.side-control-bar,
 	.sidebar-toggle-btn,
+	.logout-btn,
 	.loading-status,
 	#status {
 		display: none !important;

@@ -17,12 +17,14 @@ const dataFolder = path.join(rootFolder, "data");
 const storePath = path.join(dataFolder, "admin-store.json");
 const sessions = new Map();
 const publicSessions = new Map();
+const publicSessionDurationMs = 1000 * 60 * 60 * 24 * 7;
 
 const defaultStore = {
     settings: {
         fileLoggingEnabled: true,
     },
     users: [],
+    publicSessions: [],
     activity: [],
     moderation: [],
 };
@@ -39,7 +41,7 @@ exports.requireAdminAuth = (req, res, next) => {
 };
 
 exports.requirePublicAuth = async (req, res, next) => {
-    const session = getSessionFromRequest(req, "public_session", publicSessions);
+    const session = await getPublicSessionFromRequest(req);
 
     if (!session) {
         return res.status(401).json({ error: "Login required", loginUrl: "/login.html" });
@@ -56,12 +58,12 @@ exports.requirePublicAuth = async (req, res, next) => {
 };
 
 exports.redirectToPublicLogin = async (req, res, next) => {
-    const session = getSessionFromRequest(req, "public_session", publicSessions);
-    if (!session) return res.redirect("/login.html");
+    const session = await getPublicSessionFromRequest(req);
+    if (!session) return res.redirect(getPublicLoginUrl(req));
 
     const store = await getStore();
     const user = store.users.find((item) => item.id === session.user.id);
-    if (!user || user.blocked || user.approved === false) return res.redirect("/login.html");
+    if (!user || user.blocked || user.approved === false) return res.redirect(getPublicLoginUrl(req));
 
     req.publicUser = sanitizeUser(user);
     next();
@@ -117,9 +119,18 @@ exports.publicLogin = async (req, res) => {
 
         const token = crypto.randomBytes(32).toString("hex");
         const sessionUser = sanitizeUser(user);
+        const expiresAt = Date.now() + publicSessionDurationMs;
         publicSessions.set(token, {
             user: sessionUser,
-            expiresAt: Date.now() + 1000 * 60 * 60 * 24 * 7,
+            expiresAt,
+        });
+        store.publicSessions = getActivePublicSessionRecords(store)
+            .filter((session) => session.userId !== user.id && session.token !== token);
+        store.publicSessions.push({
+            token,
+            userId: user.id,
+            createdAt: new Date().toISOString(),
+            expiresAt,
         });
         user.lastLoginAt = new Date().toISOString();
         await saveStore(store);
@@ -127,8 +138,9 @@ exports.publicLogin = async (req, res) => {
 
         res.cookie("public_session", token, {
             httpOnly: true,
+            path: "/",
             sameSite: "strict",
-            maxAge: 1000 * 60 * 60 * 24 * 7,
+            maxAge: publicSessionDurationMs,
         });
         res.json({ ok: true, user: sessionUser });
     } catch (err) {
@@ -138,13 +150,19 @@ exports.publicLogin = async (req, res) => {
 
 exports.publicLogout = async (req, res) => {
     const token = getCookie(req, "public_session");
-    if (token) publicSessions.delete(token);
-    res.clearCookie("public_session");
+    if (token) {
+        publicSessions.delete(token);
+        const store = await getStore();
+        store.publicSessions = getActivePublicSessionRecords(store)
+            .filter((session) => session.token !== token);
+        await saveStore(store);
+    }
+    res.clearCookie("public_session", { path: "/" });
     res.json({ ok: true });
 };
 
-exports.getPublicSession = (req, res) => {
-    const session = getSessionFromRequest(req, "public_session", publicSessions);
+exports.getPublicSession = async (req, res) => {
+    const session = await getPublicSessionFromRequest(req);
     if (!session) return res.status(401).json({ error: "Login required" });
     res.json({ ok: true, user: session.user });
 };
@@ -178,6 +196,7 @@ exports.login = async (req, res) => {
 
         res.cookie("admin_session", token, {
             httpOnly: true,
+            path: "/",
             sameSite: "strict",
             maxAge: 1000 * 60 * 60 * 12,
         });
@@ -191,7 +210,7 @@ exports.login = async (req, res) => {
 exports.logout = async (req, res) => {
     const token = getCookie(req, "admin_session");
     if (token) sessions.delete(token);
-    res.clearCookie("admin_session");
+    res.clearCookie("admin_session", { path: "/" });
     if (req.adminUser) {
         await addActivity("logout", req.adminUser.username, "Admin panel logout");
     }
@@ -598,6 +617,14 @@ function normalizeStore(store) {
             ...(store.settings || {}),
         },
         users,
+        publicSessions: Array.isArray(store.publicSessions)
+            ? store.publicSessions.filter((session) => {
+                return session
+                    && typeof session.token === "string"
+                    && typeof session.userId === "string"
+                    && Number(session.expiresAt) > Date.now();
+            })
+            : [],
         activity: Array.isArray(store.activity) ? store.activity.slice(0, 250) : [],
         moderation: Array.isArray(store.moderation) ? store.moderation : [],
     };
@@ -665,6 +692,45 @@ function getSessionFromRequest(req, cookieName = "admin_session", sessionStore =
 
     session.expiresAt = Date.now() + 1000 * 60 * 60 * 12;
     return session;
+}
+
+async function getPublicSessionFromRequest(req) {
+    const token = getCookie(req, "public_session");
+    if (!token) return null;
+
+    const cachedSession = publicSessions.get(token);
+    if (cachedSession && cachedSession.expiresAt > Date.now()) {
+        return cachedSession;
+    }
+    publicSessions.delete(token);
+
+    const store = await getStore();
+    const publicSession = getActivePublicSessionRecords(store)
+        .find((session) => session.token === token);
+    if (!publicSession) return null;
+
+    const user = store.users.find((item) => item.id === publicSession.userId);
+    if (!user || user.blocked || user.approved === false) return null;
+
+    const session = {
+        user: sanitizeUser(user),
+        expiresAt: publicSession.expiresAt,
+    };
+    publicSessions.set(token, session);
+    return session;
+}
+
+function getActivePublicSessionRecords(store) {
+    return Array.isArray(store.publicSessions)
+        ? store.publicSessions.filter((session) => Number(session.expiresAt) > Date.now())
+        : [];
+}
+
+function getPublicLoginUrl(req) {
+    const nextUrl = req.originalUrl && req.originalUrl !== "/login.html"
+        ? req.originalUrl
+        : "/";
+    return `/login.html?next=${encodeURIComponent(nextUrl)}`;
 }
 
 function getCookie(req, name) {

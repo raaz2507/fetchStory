@@ -34,11 +34,25 @@ let storyData = null;
 			const totalWordsInput = document.getElementById("total_words");
 			const notFoundWordsInput = document.getElementById("not_found_words");
 			const conversionPercentInput = document.getElementById("con_per");
+			const logoutBtn = document.getElementById("logoutBtn");
 			let useLocalImageFolder = false;
 			let activeTranslationJobId = null;
 			let activeTranslationSource = null;
 			let lastScrollSaveAt = 0;
 			let isRestoringScroll = false;
+
+			const nativeFetch = window.fetch.bind(window);
+			window.fetch = async (input, init = {}) => {
+				const options = {
+					...init,
+					credentials: init.credentials || "same-origin",
+				};
+				const response = await nativeFetch(input, options);
+				if (response.status === 401) {
+					window.location.href = `/login.html?next=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+				}
+				return response;
+			};
 
 			// 🔄 साइडबार को टॉगल (ओपन/क्लोज) करने का फंक्शन
 			if (contentArea) {
@@ -164,6 +178,10 @@ let storyData = null;
 					clearCacheBtn.addEventListener("click", clearReaderCache);
 				}
 
+				if (logoutBtn) {
+					logoutBtn.addEventListener("click", logoutPublicSession);
+				}
+
 				const savedImageFolderPath =
 					localStorage.getItem("readerImageFolderPath") || "";
 				if (imageFolderPathInput && savedImageFolderPath) {
@@ -228,6 +246,7 @@ let storyData = null;
 					try {
 						const response = await fetch("/api/translator/translate-json", {
 							method: "POST",
+							credentials: "same-origin",
 							headers: {
 								"Content-Type": "application/json",
 							},
@@ -263,7 +282,10 @@ let storyData = null;
 					try {
 						const response = await fetch(
 							`/api/translator/translate-json/${activeTranslationJobId}/cancel`,
-							{ method: "POST" },
+							{
+								method: "POST",
+								credentials: "same-origin",
+							},
 						);
 						const result = await response.json().catch(() => ({}));
 
@@ -335,7 +357,9 @@ let storyData = null;
 				}
 
 				function watchTranslationProgress(jobId) {
-					const source = new EventSource(`/api/translator/progress/${jobId}`);
+					const source = new EventSource(`/api/translator/progress/${jobId}`, {
+						withCredentials: true,
+					});
 					activeTranslationSource = source;
 
 					source.onmessage = (event) => {
@@ -560,6 +584,21 @@ let storyData = null;
 						statusDiv.textContent = err.message || "Cache clear failed.";
 					} finally {
 						if (clearCacheBtn) clearCacheBtn.disabled = false;
+					}
+				}
+
+				async function logoutPublicSession() {
+					if (logoutBtn) logoutBtn.disabled = true;
+
+					try {
+						await fetch("/api/auth/logout", {
+							method: "POST",
+							credentials: "same-origin",
+						});
+					} catch (err) {
+						console.warn("Logout request failed:", err.message);
+					} finally {
+						window.location.href = "/login.html";
 					}
 				}
 

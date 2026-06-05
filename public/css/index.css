@@ -82,7 +82,8 @@ button:disabled {
 }
 
 #cancelFetchBtn,
-#clearCache {
+#clearCache,
+#logoutBtn {
     --btn-bg: var(--danger);
     --btn-hover: var(--danger-strong);
 }

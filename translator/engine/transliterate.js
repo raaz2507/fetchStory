@@ -5,6 +5,7 @@ const axios = require("axios");
 const cheerio = require("cheerio");
 
 const localDictionary = require("./Hindi2EnglishDic");
+// import {localDictionary: Dictionary} from "./Hindi2EnglishDic.js";
 
 const githubDictionaryUrl =
 	"https://raw.githubusercontent.com/raaz2507/English2Hindi-Transliteration/main/js/Hindi2EnglishDic.js";
@@ -12,6 +13,12 @@ const githubIgnoreWordsUrl =
 	"https://raw.githubusercontent.com/raaz2507/English2Hindi-Transliteration/main/js/ignoreWoldList.js";
 
 let activeDictionary = localDictionary.Dictionary;
+
+console.log("localDictionary keys:", Object.keys(localDictionary));
+console.log("Dictionary exists:", !!localDictionary.Dictionary);
+console.log("localDictionary exists:", !!localDictionary.localDictionary);
+
+
 let dictionarySource = "local";
 let dictionaryLoadPromise = null;
 let activeIgnoreWords = loadLocalIgnoreWords();

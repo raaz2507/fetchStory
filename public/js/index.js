@@ -38,6 +38,7 @@ const insertJsonBtn = document.getElementById("insertJsonBtn");
 const jsonUploadInput = document.getElementById("jsonUploadInput");
 const cleanUploadedJsonBtn = document.getElementById("cleanUploadedJsonBtn");
 const processUploadedImagesBtn = document.getElementById("processUploadedImagesBtn");
+const logoutBtn = document.getElementById("logoutBtn");
 const cacheKey = "storyScraper:lastStory";
 const idbName = "storyScraperDB";
 const idbStoreName = "cache";
@@ -61,6 +62,19 @@ let currentPage = 1;
 let isLoadingPages = false;
 let hasMorePages = true;
 let allowTempPageLoading = false;
+
+const nativeFetch = window.fetch.bind(window);
+window.fetch = async (input, init = {}) => {
+    const options = {
+        ...init,
+        credentials: init.credentials || "same-origin",
+    };
+    const response = await nativeFetch(input, options);
+    if (response.status === 401) {
+        window.location.href = `/login.html?next=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+    }
+    return response;
+};
 
 applyTheme(localStorage.getItem(themeKey) || "light");
 restoreFromCache(false);
@@ -152,6 +166,10 @@ if (summaryPanelToggle && summaryPanel) {
             closeSummaryPanel();
         }
     });
+}
+
+if (logoutBtn) {
+    logoutBtn.addEventListener("click", logoutPublicSession);
 }
 
 insertJsonBtn.addEventListener("click", () => {
@@ -264,7 +282,8 @@ processUploadedImagesBtn.addEventListener("click", () => {
         setFetchingState(true);
 
         activeEventSource = new EventSource(
-            `/api/story/process-uploaded-images-stream?jobId=${encodeURIComponent(currentStoryJobId)}`
+            `/api/story/process-uploaded-images-stream?jobId=${encodeURIComponent(currentStoryJobId)}`,
+            { withCredentials: true }
         );
 
         activeEventSource.onerror = (err) => {
@@ -611,7 +630,9 @@ fetchBtn.addEventListener("click", () => {
     activeOperation = "fetch";
     setFetchingState(true);
 
-    activeEventSource = new EventSource(`/api/story/stream?${params.toString()}`);
+    activeEventSource = new EventSource(`/api/story/stream?${params.toString()}`, {
+        withCredentials: true,
+    });
 
     activeEventSource.onerror = (err) => {
         console.error("SSE error", err);
@@ -891,8 +912,23 @@ document.getElementById("downloadBtn").addEventListener("click", async () => {
 });
 
 document.getElementById("openReaderBtn").addEventListener("click", () => {
-    window.open("/reader_template.html", "_blank", "noopener");
+    window.open("/reader-translator", "_blank", "noopener");
 });
+
+async function logoutPublicSession() {
+    if (logoutBtn) logoutBtn.disabled = true;
+
+    try {
+        await fetch("/api/auth/logout", {
+            method: "POST",
+            credentials: "same-origin",
+        });
+    } catch (err) {
+        console.warn("Logout request failed:", err.message);
+    } finally {
+        window.location.href = "/login.html";
+    }
+}
 
 function applyStoryData(storyData, options = {}) {
     const enableAppend = options.enableAppend !== false;

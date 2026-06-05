@@ -7,5 +7,13 @@ export const ignoreWords = new Set(['1','2','3','4','5','6','7','8','9','0','too
 	 "if", "would", "mostly","things","over", "simple","from","thing","lets","never", "make","join","we",
 	 "thought","your" ,"went","need","about","said","leave","seriously","at","wanted", "pick","happen", 
 	 "out", "even","age","did",  "thanx","very","still", "gf","again","talk","here","shoping","go","plz", 
-	 "dr", "am", "km","don", "dm" , "of", "mean", "its", "lady", "short", "much", "common"]);
+	 "dr", "am", "km","don", "dm" , "of", "mean", "its", "lady", "short", "much", "common", "expand", 
+	 "a","b","c","d","e","f","g","h", "i", "j", "k", "l", "m", "n", "o", "p","q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
+	 "finally", "updates", "tomorrow", "clitories", "pregnancy", "sleeping", "keyhole", "infact", "oscar", "erotic",
+	 "an", "people", "expressions", "status", "written", "going", "delay", "contraceptive", "inbox", "give", "it's",
+	 "before", "views", "according", "adventures", "aggression", "aggressive","aggressively","almost",  "also", "another", "anyways", "appreciation",
+	"arms", "around", "attend", "attract","bites", "clearly", "client", "clothed", "comfortable", "community", "coming", "compare", "completed", "completing","conservative", "congrats", "contact", "contraceptive",  "cosco",   "covered","due", "editing","else", "enjoying", "enjoyment", "interracial",
+"once", "other", "passionately", "pistorious", "religious",  "restriction", "rich", "rub","seems", "someone", "soon",  "thats" ,"those","through", "till", 
+ "yourself", 
+	]);
 

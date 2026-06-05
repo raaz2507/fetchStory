@@ -7,7 +7,9 @@ const {
 
 const router = express.Router();
 
-router.post("/api/reader/image-folder", setImageFolder);
-router.use("/local-images", serveLocalImage);
+router.post("/image-folder", setImageFolder);
 
-module.exports = router;
+module.exports = {
+    router,
+    serveLocalImage,
+};
