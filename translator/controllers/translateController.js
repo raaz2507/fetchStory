@@ -25,6 +25,7 @@ exports.translateJson = async (req, res) => {
 			total: 0,
 
 			done: false,
+			cancelRequested: false,
 
 			createdAt: Date.now(),
 
@@ -65,4 +66,24 @@ exports.translateJson = async (req, res) => {
 			error: error.message,
 		});
 	}
+};
+
+exports.cancelTranslation = (req, res) => {
+	const jobId = req.params.jobId;
+	const progress = progressStore[jobId];
+
+	if (!progress) {
+		return res.status(404).json({
+			success: false,
+			error: "Translation job not found",
+		});
+	}
+
+	progress.cancelRequested = true;
+	progress.message = "Stop requested. Finishing current post...";
+
+	res.json({
+		success: true,
+		jobId,
+	});
 };

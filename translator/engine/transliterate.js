@@ -2,23 +2,30 @@ const vm = require("vm");
 const fs = require("fs");
 const path = require("path");
 const axios = require("axios");
+const cheerio = require("cheerio");
 
 const localDictionary = require("./Hindi2EnglishDic");
 
-const githubDictionaryUrl = "https://raw.githubusercontent.com/raaz2507/English2Hindi-Transliteration/main/js/Hindi2EnglishDic.js";
-const githubIgnoreWordsUrl = "https://raw.githubusercontent.com/raaz2507/English2Hindi-Transliteration/main/js/ignoreWoldList.js";
+const githubDictionaryUrl =
+	"https://raw.githubusercontent.com/raaz2507/English2Hindi-Transliteration/main/js/Hindi2EnglishDic.js";
+const githubIgnoreWordsUrl =
+	"https://raw.githubusercontent.com/raaz2507/English2Hindi-Transliteration/main/js/ignoreWoldList.js";
+
 let activeDictionary = localDictionary.Dictionary;
 let dictionarySource = "local";
 let dictionaryLoadPromise = null;
 let activeIgnoreWords = loadLocalIgnoreWords();
 let ignoreWordsSource = "local";
 let ignoreWordsLoadPromise = null;
+let flatActiveDictionary = null;
 
 class TransliterationEngine {
 	constructor() {
 		this.cache = new Map();
-		this.notFoundWords = [];
-		this.totalWordArr = [];
+		this.notFoundWords = new Map();
+		this.totalWords = 0;
+		this.translatedWords = 0;
+		this.ignoredWords = 0;
 	}
 
 	static async initializeDictionary() {
@@ -39,133 +46,153 @@ class TransliterationEngine {
 		return dictionarySource;
 	}
 
-	#protectHTML(input) {
-		const map = new Map();
-		let id = 0;
+	static countWordsFromHtml(input) {
+		const $ = cheerio.load(String(input || ""), { decodeEntities: false }, false);
+		let count = 0;
 
-		const protectedText = input.replace(/<[^>]+>|&(?:[a-zA-Z][\w-]*|#\d+|#x[\da-fA-F]+);/g, (tag) => {
-			const key = `@@HTML_${id++}@@`;
-			map.set(key, tag);
-			return key;
+		walkTextNodes($.root(), ($node) => {
+			count += countWordsFromText($node[0].data || "");
 		});
 
-		return { text: protectedText, map };
+		return count;
 	}
-	#restoreHTML(text, map) {
-		for (let [key, value] of map.entries()) {
-			text = text.replaceAll(key, value);
-		}
-		return text;
+
+	convertHTML(input) {
+		const $ = cheerio.load(String(input || ""), { decodeEntities: false }, false);
+
+		walkTextNodes($.root(), ($node) => {
+			const text = $node[0].data || "";
+			$node[0].data = this.convertText(text);
+		});
+
+		return $.root().html() || "";
 	}
+
+	convertText(text) {
+		return this.#tokenize(text)
+			.map((token) => this.#translateToken(token))
+			.join("");
+	}
+
+	getStats() {
+		const notFoundWords = Object.fromEntries(
+			Array.from(this.notFoundWords.entries()).sort((a, b) => b[1] - a[1]),
+		);
+
+		return {
+			totalWords: this.totalWords,
+			translatedWords: this.translatedWords,
+			ignoredWords: this.ignoredWords,
+			notFoundWords,
+			notFoundCount: Object.keys(notFoundWords).length,
+			notFoundTotal: Array.from(this.notFoundWords.values()).reduce(
+				(sum, count) => sum + count,
+				0,
+			),
+			conversionPercent: this.getConversionPercent(),
+		};
+	}
+
+	getConversionPercent() {
+		if (!this.totalWords) return 0;
+		return Math.round((this.translatedWords / this.totalWords) * 100);
+	}
+
 	#tokenize(text) {
 		return (
-			text.match(
-				/@@HTML_\d+@@|[\p{L}\p{M}_']+|\d+|[.,!?;:"()\n\t]|./gu
-			) || []
+			String(text).match(/[\p{L}\p{M}_']+|\d+|\s+|[^\s\p{L}\p{M}_'\d]+/gu) ||
+			[]
 		);
 	}
 
-	#flattenDictionary(dic) {
-		if (this.flatDic) return this.flatDic;
+	#translateToken(token) {
+		if (!isWordToken(token)) return token;
 
-		this.flatDic = {};
+		const lower = token.toLowerCase();
+		this.totalWords++;
 
-		for (let group in dic) {
-			Object.assign(this.flatDic, dic[group]);
+		if (this.cache.has(lower)) {
+			const cached = this.cache.get(lower);
+			if (cached.translated) this.translatedWords++;
+			if (cached.ignored) this.ignoredWords++;
+			if (cached.notFound) {
+				this.notFoundWords.set(
+					lower,
+					(this.notFoundWords.get(lower) || 0) + 1,
+				);
+			}
+			return cached.output;
 		}
 
-		return this.flatDic;
-	}
-
-	#translate(tokens) {
-		const dic = this.#flattenDictionary(activeDictionary);
-		let output = [];
-
-		for (let token of tokens) {
-			let lower = token.toLowerCase();
-
-			// cache hit
-			if (this.cache.has(lower)) {
-				output.push(this.cache.get(lower));
-				continue;
-			}
-
-			// skip HTML tokens
-			if (token.startsWith("@@HTML_")) {
-				output.push(token);
-				continue;
-			}
-
-			if (activeIgnoreWords.has(lower)) {
-				output.push(token);
-				continue;
-			}
-
-			let translated = dic[lower];
-
-			if (translated) {
-				this.cache.set(lower, translated);
-				output.push(translated);
-			} else {
-				output.push(token);
-
-				if (/^[a-zA-Z]+$/.test(token)) {
-					this.notFoundWords.push(token);
-				}
-			}
+		if (activeIgnoreWords.has(lower)) {
+			this.ignoredWords++;
+		this.cache.set(lower, {
+			output: token,
+			translated: false,
+			ignored: true,
+			notFound: false,
+		});
+		return token;
 		}
 
-		return output;
-	}
-
-	#join(tokens) {
-		const noSpaceBefore = /^[.,!?;:)]$/;
-		const noSpaceAfter = /^[("]$/;
-
-		let result = "";
-
-		for (let i = 0; i < tokens.length; i++) {
-			let curr = tokens[i];
-			let prev = tokens[i - 1];
-
-			if (curr === "\n" || curr === "\t") {
-				result += curr;
-				continue;
-			}
-
-			if (!prev) {
-				result += curr;
-				continue;
-			}
-
-			if (noSpaceBefore.test(curr)) {
-				result = result.trimEnd() + curr;
-			} else if (noSpaceAfter.test(prev)) {
-				result += curr;
-			} else {
-				result += " " + curr;
-			}
+		const translated = getFlatDictionary()[lower];
+		if (translated) {
+			this.translatedWords++;
+			this.cache.set(lower, {
+				output: translated,
+				translated: true,
+				ignored: false,
+				notFound: false,
+			});
+			return translated;
 		}
 
-		return result.trim();
+		this.notFoundWords.set(lower, (this.notFoundWords.get(lower) || 0) + 1);
+		this.cache.set(lower, {
+			output: token,
+			translated: false,
+			ignored: false,
+			notFound: true,
+		});
+		return token;
 	}
-	
-	convertHTML(input) {
-		// 1. protect HTML
-		const { text, map } = this.#protectHTML(input);
+}
 
-		// 2. tokenize
-		const tokens = this.#tokenize(text);
+function walkTextNodes($nodes, onTextNode) {
+	$nodes.each((_, node) => {
+		const $node = cheerio.load("", null, false)(node);
 
-		// 3. translate
-		const translated = this.#translate(tokens);
+		if (node.type === "text") {
+			onTextNode($node);
+			return;
+		}
 
-		// 4. rebuild text
-		const joined = this.#join(translated);
+		if (node.type === "script" || node.type === "style") return;
+		if (node.children && node.children.length) {
+			walkTextNodes($node.contents(), onTextNode);
+		}
+	});
+}
 
-		// 5. restore HTML
-		return this.#restoreHTML(joined, map);
+function isWordToken(token) {
+	return /^[\p{L}\p{M}_']+$/u.test(token) && /[a-zA-Z]/.test(token);
+}
+
+function countWordsFromText(text) {
+	return (String(text).match(/[\p{L}\p{M}_']+/gu) || []).filter((word) =>
+		/[a-zA-Z]/.test(word),
+	).length;
+}
+
+function getFlatDictionary() {
+	if (flatActiveDictionary) return flatActiveDictionary;
+
+	flatActiveDictionary = {};
+	for (const group of Object.values(activeDictionary || {})) {
+		Object.assign(flatActiveDictionary, group);
 	}
+
+	return flatActiveDictionary;
 }
 
 async function loadDictionaryFromGithub() {
@@ -193,7 +220,11 @@ async function loadDictionaryWithFallback() {
 	} catch (err) {
 		activeDictionary = localDictionary.Dictionary;
 		dictionarySource = "local";
-		console.warn(`GitHub dictionary unavailable, using local dictionary: ${err.message}`);
+		console.warn(
+			`GitHub dictionary unavailable, using local dictionary: ${err.message}`,
+		);
+	} finally {
+		flatActiveDictionary = null;
 	}
 }
 
@@ -207,7 +238,9 @@ async function loadIgnoreWordsWithFallback() {
 			.catch((err) => {
 				activeIgnoreWords = loadLocalIgnoreWords();
 				ignoreWordsSource = "local";
-				console.warn(`GitHub ignore word list unavailable, using local list: ${err.message}`);
+				console.warn(
+					`GitHub ignore word list unavailable, using local list: ${err.message}`,
+				);
 			});
 	}
 
@@ -222,7 +255,10 @@ async function loadIgnoreWordsFromGithub() {
 			"User-Agent": "fetchStory-transliterator",
 		},
 	});
-	const words = evaluateIgnoreWordsModule(response.data, "ignoreWoldList.github.js");
+	const words = evaluateIgnoreWordsModule(
+		response.data,
+		"ignoreWordList.github.js",
+	);
 
 	if (!(words instanceof Set) && !Array.isArray(words)) {
 		throw new Error("GitHub ignore word list did not export ignoreWords");
@@ -253,12 +289,14 @@ function evaluateDictionaryModule(source) {
 }
 
 function loadLocalIgnoreWords() {
-	const ignorePath = path.join(__dirname, "ignoreWoldList.js");
+	const preferredPath = path.join(__dirname, "ignoreWordList.js");
+	const legacyPath = path.join(__dirname, "ignoreWoldList.js");
+	const ignorePath = fs.existsSync(preferredPath) ? preferredPath : legacyPath;
 
 	try {
 		const source = fs.readFileSync(ignorePath, "utf8");
 		return normalizeIgnoreWords(
-			evaluateIgnoreWordsModule(source, "ignoreWoldList.js"),
+			evaluateIgnoreWordsModule(source, path.basename(ignorePath)),
 		);
 	} catch (err) {
 		console.warn(`Ignore word list unavailable: ${err.message}`);

@@ -4,523 +4,174 @@
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 		<title>Offline Reader Pro</title>
-		<style>
-			/* 💡 थीम वेरिएबल्स */
-			:root {
-				--bg-color: #f4f4f9;
-				--container-bg: #ffffff;
-				--text-color: #333333;
-				--title-color: #111111;
-				--border-color: #eeeeee;
-				--dashed-border: #dddddd;
-				--quote-bg: #f9f9f9;
-				--quote-border: #cccccc;
-				--quote-text: #666666;
-				--sidebar-bg: #ffffff;
-				--sidebar-boxshadow: rgba(0, 0, 0, 0.15);
-			}
-
-			[data-theme="dark"] {
-				--bg-color: #121212;
-				--container-bg: #1e1e1e;
-				--text-color: #e0e0e0;
-				--title-color: #ffffff;
-				--border-color: #333333;
-				--dashed-border: #444444;
-				--quote-bg: #2a2a2a;
-				--quote-border: #555555;
-				--quote-text: #b0b0b0;
-				--sidebar-bg: #1e1e1e;
-				--sidebar-boxshadow: rgba(0, 0, 0, 0.5);
-			}
-
-			[data-theme="sepia"] {
-				--bg-color: #f4ecd8;
-				--container-bg: #fdf6e3;
-				--text-color: #5b4636;
-				--title-color: #433422;
-				--border-color: #e4d9c4;
-				--dashed-border: #d3c7ae;
-				--quote-bg: #f5edd5;
-				--quote-border: #b8a98f;
-				--quote-text: #7c6853;
-				--sidebar-bg: #fdf6e3;
-				--sidebar-boxshadow: rgba(0, 0, 0, 0.1);
-			}
-
-			[data-theme="forest"] {
-				--bg-color: #14221c;
-				--container-bg: #1a2e26;
-				--text-color: #cbdad5;
-				--title-color: #e8f1ed;
-				--border-color: #264237;
-				--dashed-border: #2d4f41;
-				--quote-bg: #1f372d;
-				--quote-border: #3b6655;
-				--quote-text: #9cb4ab;
-				--sidebar-bg: #1a2e26;
-				--sidebar-boxshadow: rgba(0, 0, 0, 0.4);
-			}
-
-			[data-theme="cyber"] {
-				--bg-color: #0c0f1d;
-				--container-bg: #121829;
-				--text-color: #00ffcc;
-				--title-color: #ff007f;
-				--border-color: #ff007f;
-				--dashed-border: #00ffcc;
-				--quote-bg: #1a2238;
-				--quote-border: #ff007f;
-				--quote-text: #00ffcc;
-				--sidebar-bg: #121829;
-				--sidebar-boxshadow: rgba(255, 0, 127, 0.3);
-			}
-
-			body {
-				margin: 0;
-				padding: 0;
-				background-color: var(--bg-color);
-				font-family:
-					-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-				color: var(--text-color);
-				transition:
-					background-color 0.3s,
-					color 0.3s;
-			}
-
-			/* ⚙️ साइड पैनल टॉगल बटन */
-			.sidebar-toggle-btn {
-				position: fixed;
-				top: 20px;
-				left: 20px;
-				z-index: 1001;
-				background: #007bff;
-				color: white;
-				border: none;
-				padding: 12px 15px;
-				border-radius: 50px;
-				font-size: 1.1rem;
-				font-weight: bold;
-				cursor: pointer;
-				box-shadow: 0 4px 10px rgba(0, 123, 255, 0.3);
-				transition: all 0.3s ease;
-				display: flex;
-				align-items: center;
-				gap: 5px;
-			}
-			.sidebar-toggle-btn:hover {
-				transform: scale(1.05);
-				background: #0056b3;
-			}
-
-			/* 📂 नया साइड कंट्रोल बार (Sidenav) */
-			.side-control-bar {
-				position: fixed;
-				top: 0;
-				left: -320px; /* डिफ़ॉल्ट रूप से छिपा रहेगा */
-				width: 300px;
-				height: 100%;
-				background: var(--sidebar-bg);
-				box-shadow: 2px 0 15px var(--sidebar-boxshadow);
-				z-index: 1000;
-				padding: 80px 20px 20px 20px;
-				box-sizing: border-box;
-				transition: left 0.4s cubic-bezier(0.05, 0.74, 0.2, 1);
-				overflow-y: auto;
-				display: flex;
-				flex-direction: column;
-				gap: 20px;
-			}
-
-			/* जब साइडबार ओपन हो */
-			.side-control-bar.open {
-				left: 0;
-			}
-
-			.control-group {
-				display: flex;
-				flex-direction: column;
-				gap: 8px;
-				border-bottom: 1px solid var(--border-color);
-				padding-bottom: 15px;
-			}
-
-			.control-group label {
-				font-size: 0.85rem;
-				font-weight: bold;
-				text-transform: uppercase;
-				letter-spacing: 0.5px;
-				color: var(--text-color);
-				opacity: 0.8;
-			}
-
-			/* बटन और सिलेक्टर्स के कॉमन स्टाइल्स */
-			.btn-common,
-			.theme-select {
-				width: 100%;
-				padding: 10px;
-				font-size: 0.9rem;
-				font-weight: bold;
-				border-radius: 6px;
-				border: 1px solid var(--border-color);
-				background: var(--container-bg);
-				color: var(--text-color);
-				cursor: pointer;
-				transition: all 0.2s;
-				text-align: center;
-				box-sizing: border-box;
-			}
-			.btn-common:hover {
-				opacity: 0.9;
-				transform: translateY(-1px);
-			}
-
-			.browse-label {
-				background: #6c757d;
-				color: white;
-				border: none;
-			}
-			.load-all-btn {
-				background: #28a745;
-				color: white;
-				border: none;
-			}
-			.print-btn {
-				background: #e83e8c;
-				color: white;
-				border: none;
-			}
-			.clear-cache-btn {
-				background: #dc3545;
-				color: white;
-				border: none;
-			}
-			.language-toggle-btn {
-				background: #007bff;
-				color: white;
-				border: none;
-			}
-			#jsonFile {
-				display: none;
-			}
-			.hide {
-				display: none !important;
-			}
-			.statusBox {
-				padding: 0.6rem;
-				background: var(--quote-bg);
-				border: 1px solid var(--border-color);
-				border-radius: 4px;
-				font-size: 0.85rem;
-				color: var(--text-color);
-			}
-			#progressBar {
-				width: 100%;
-				height: 12px;
-			}
-			.download-link {
-				display: block;
-				text-decoration: none;
-			}
-			.path-input {
-				width: 100%;
-				padding: 10px;
-				font-size: 0.85rem;
-				border-radius: 6px;
-				border: 1px solid var(--border-color);
-				background: var(--container-bg);
-				color: var(--text-color);
-				box-sizing: border-box;
-			}
-			.small-status {
-				font-size: 0.78rem;
-				opacity: 0.75;
-				text-align: center;
-				min-height: 1rem;
-			}
-
-			/* फॉन्ट साइज कंट्रोल्स */
-			.font-controls {
-				display: flex;
-				gap: 10px;
-			}
-			.font-btn {
-				flex: 1;
-				padding: 10px;
-				font-weight: bold;
-				font-size: 1rem;
-				background: var(--container-bg);
-				color: var(--text-color);
-				border: 1px solid var(--border-color);
-				border-radius: 6px;
-				cursor: pointer;
-			}
-			.font-btn:hover {
-				background: #007bff;
-				color: white;
-			}
-
-			/* कस्टम कलर पिकर रॉ */
-			.color-picker-wrapper {
-				display: flex;
-				align-items: center;
-				gap: 10px;
-			}
-			.color-input {
-				width: 50px;
-				height: 35px;
-				border: none;
-				border-radius: 4px;
-				cursor: pointer;
-				background: none;
-			}
-
-			/* रीडर कंटेनर */
-			.reader-container {
-				width: 95%;
-				max-width: 800px;
-				margin: 6rem auto 2rem auto;
-				background: var(--container-bg);
-				padding: 2.5rem;
-				border-radius: 8px;
-				box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
-				box-sizing: border-box;
-				position: relative;
-				transition: background-color 0.3s;
-			}
-
-			h1.story-title {
-				text-align: center;
-				margin-bottom: 2rem;
-				color: var(--title-color);
-				border-bottom: 2px solid var(--border-color);
-				padding-bottom: 1rem;
-				font-size: 1.8rem;
-				line-height: 1.4;
-			}
-
-			/* 💡 फॉन्ट साइज वेरिएबल के साथ रीड एरिया */
-			#content-area {
-				text-align: justify;
-				line-height: 1.8;
-				font-size: 1.1rem; /* डिफ़ॉल्ट */
-			}
-
-			.story-page {
-				padding: 2rem 0;
-				border-bottom: 1px dashed var(--dashed-border);
-				animation: fadeIn 0.5s ease-in;
-			}
-			.bbCodeBlock {
-				background: var(--quote-bg);
-				border-left: 3px solid var(--quote-border);
-				padding: 0.5rem 1rem;
-				margin: 1rem 0;
-				font-size: 0.95rem;
-				color: var(--quote-text);
-			}
-			.bbCodeBlock-title {
-				font-weight: bold;
-				font-size: 0.85rem;
-				margin-bottom: 0.3rem;
-			}
-			.story-page img {
-				max-width: 100%;
-				height: auto;
-				display: block;
-				margin: 1rem auto;
-				border-radius: 4px;
-				box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-			}
-			.loading-status {
-				text-align: center;
-				color: var(--text-color);
-				opacity: 0.6;
-				padding: 2rem;
-				font-style: italic;
-				font-weight: bold;
-			}
-
-			@keyframes fadeIn {
-				from {
-					opacity: 0;
-					transform: translateY(10px);
-				}
-				to {
-					opacity: 1;
-					transform: translateY(0);
-				}
-			}
-
-			/* 🚨 फिक्स्ड प्रिंट मीडिया रूल्स */
-			@media print {
-				@page {
-					size: A4;
-					margin: 20mm;
-				}
-				* {
-					-webkit-print-color-adjust: exact !important;
-					print-color-adjust: exact !important;
-				}
-				.side-control-bar,
-				.sidebar-toggle-btn,
-				.loading-status,
-				#status {
-					display: none !important;
-				}
-				body {
-					padding: 0 !important;
-					margin: 0 !important;
-				}
-				.reader-container {
-					margin: 0 !important;
-					border-radius: 0 !important;
-					box-shadow: none !important;
-					width: 100% !important;
-					max-width: 100% !important;
-				}
-				h1.story-title {
-					
-					border-bottom: 2px solid #000000 !important;
-				}
-				.story-page {
-					page-break-inside: avoid;
-					border-bottom: none !important;
-				}
-				.bbCodeBlock {
-				}
-			}
-		</style>
+		<link rel="stylesheet" href="./css/reader.css" />
 	</head>
 	<body>
 		<button class="sidebar-toggle-btn" onclick="toggleSidebar(event)">
-			⚙️ <span id="toggle-text">Menu</span>
+			<span id="toggle-text">Menu</span>
 		</button>
 
 		<div class="side-control-bar" id="side-control-bar">
-			<div class="control-group">
-				<label>Story File</label>
-				<label for="jsonFile" class="btn-common browse-label"
-					>📂 Browse JSON</label
-				>
-				<input
-					type="file"
-					id="jsonFile"
-					accept=".json"
-					onchange="handleFileSelect(event)" />
-				<span
-					id="file-name-display"
-					style="
-						font-size: 0.8rem;
-						opacity: 0.7;
-						font-style: italic;
-						text-align: center;
-					"
-					>No file chosen</span
-				>
-			</div>
-
-			<div class="control-group">
-				<label>Translate</label>
-				<button class="btn-common translate-btn" id="translateBtn">
-					Translate Story
-				</button>
-				<div class="statusBox">
-					<p id="status">Waiting...</p>
-				</div>
-				<progress id="progressBar" value="0" max="100"></progress>
-				<a id="downloadBtn" class="hide btn-common download-link" href="#">
-					Download Translated JSON
-				</a>
-				<a id="downloadNotFoundBtn" class="hide btn-common download-link" href="#">
-					Download Not Found Words
-				</a>
-			</div>
-
-			<div class="control-group">
-				<label>Image Folder Path</label>
-				<input
-					type="text"
-					id="imageFolderPath"
-					class="path-input"
-					placeholder="D:/stories/images" />
-				<button class="btn-common" id="setImageFolderBtn">
-					Set Image Path
-				</button>
-				<span id="image-folder-status" class="small-status"></span>
-			</div>
-
-			<div class="control-group">
-				<label>Loading Mode</label>
-				<div class="statusBox">
-					<p id="read-progress">Read: 0%</p>
-				</div>
+			<div class="sidebar-tabs">
 				<button
-					class="btn-common load-all-btn"
-					id="load-all-btn"
-					onclick="loadWholeStory()">
-					⚡ Load All Parts
+					type="button"
+					class="sidebar-tab-btn active"
+					id="reader-tab-btn"
+					onclick="switchSidebarTab('reader')">
+					Reader
+				</button>
+				<button
+					type="button"
+					class="sidebar-tab-btn"
+					id="translator-tab-btn"
+					onclick="switchSidebarTab('translator')">
+					Translator
 				</button>
 			</div>
 
-			<div class="control-group">
-				<label>Font Size</label>
-				<div class="font-controls">
-					<button class="font-btn" onclick="adjustFontSize(-0.1)">A -</button>
-					<button class="font-btn" onclick="adjustFontSize(0.1)">A +</button>
-				</div>
-			</div>
-
-			<div class="control-group">
-				<label>Reading Theme</label>
-				<select
-					class="theme-select"
-					id="theme-select"
-					onchange="changeTheme(this.value)">
-					<option value="light">☀️ Light Theme</option>
-					<option value="dark">🌙 Dark Theme</option>
-					<option value="sepia">📜 Sepia Theme</option>
-					<option value="forest">🌲 Forest Green</option>
-					<option value="cyber">🌌 Cyberpunk Neon</option>
-				</select>
-			</div>
-
-			<div class="control-group">
-				<label>Custom Bg Color</label>
-				<div class="color-picker-wrapper">
+			<div class="tab-panel active" id="reader-tab-panel">
+				<div class="control-group">
+					<label>Story File</label>
+					<label for="jsonFile" class="btn-common browse-label"
+						>Browse JSON</label
+					>
 					<input
-						type="color"
-						id="bg-color-picker"
-						class="color-input"
-						value="#f4f4f9"
-						oninput="setCustomBg(this.value)" />
-					<span style="font-size: 0.85rem">Choose Custom Color</span>
+						type="file"
+						id="jsonFile"
+						accept=".json"
+						onchange="handleFileSelect(event)" />
+					<span
+						id="file-name-display"
+						style="
+							font-size: 0.8rem;
+							opacity: 0.7;
+							font-style: italic;
+							text-align: center;
+						"
+						>No file chosen</span
+					>
+				</div>
+
+				<div class="control-group">
+					<label>Image Folder Path</label>
+					<input
+						type="text"
+						id="imageFolderPath"
+						class="path-input"
+						placeholder="D:/stories/images" />
+					<button class="btn-common" id="setImageFolderBtn">
+						Set Image Path
+					</button>
+					<span id="image-folder-status" class="small-status"></span>
+				</div>
+
+				<div class="control-group">
+					<label>Loading Mode</label>
+					<div class="statusBox">
+						<p id="read-progress">Read: 0%</p>
+					</div>
+					<button
+						class="btn-common load-all-btn"
+						id="load-all-btn"
+						onclick="loadWholeStory()">
+						Load All Parts
+					</button>
+				</div>
+
+				<div class="control-group">
+					<label>Font Size</label>
+					<div class="font-controls">
+						<button class="font-btn" onclick="adjustFontSize(-0.1)">A -</button>
+						<button class="font-btn" onclick="adjustFontSize(0.1)">A +</button>
+					</div>
+				</div>
+
+				<div class="control-group">
+					<label>Reading Theme</label>
+					<select
+						class="theme-select"
+						id="theme-select"
+						onchange="changeTheme(this.value)">
+						<option value="light">Light Theme</option>
+						<option value="dark">Dark Theme</option>
+						<option value="sepia">Sepia Theme</option>
+						<option value="forest">Forest Green</option>
+						<option value="cyber">Cyberpunk Neon</option>
+					</select>
+				</div>
+
+				<div class="control-group">
+					<label>Custom Bg Color</label>
+					<div class="color-picker-wrapper">
+						<input
+							type="color"
+							id="bg-color-picker"
+							class="color-input"
+							value="#f4f4f9"
+							oninput="setCustomBg(this.value)" />
+						<span style="font-size: 0.85rem">Choose Custom Color</span>
+					</div>
+				</div>
+
+				<div class="control-group">
+					<label>Actions</label>
+					<button
+						class="btn-common language-toggle-btn"
+						id="lang-toggle-btn"
+						onclick="toggleLanguage()">
+						Switch to Hindi
+					</button>
+					<button
+						class="btn-common print-btn"
+						style="margin-top: 8px"
+						onclick="handlePrint()">
+						Print Story
+					</button>
+					<button
+						class="btn-common clear-cache-btn"
+						id="clear-cache-btn"
+						style="margin-top: 8px">
+						Clear Cache
+					</button>
 				</div>
 			</div>
 
-			<div class="control-group">
-				<label>Actions</label>
-				<button
-					class="btn-common language-toggle-btn"
-					id="lang-toggle-btn"
-					onclick="toggleLanguage()">
-					🌐 Switch to Hindi
-				</button>
-				<button
-					class="btn-common print-btn"
-					style="margin-top: 8px"
-					onclick="handlePrint()">
-					🖨️ Print Story
-				</button>
-				<button
-					class="btn-common clear-cache-btn"
-					id="clear-cache-btn"
-					style="margin-top: 8px">
-					Clear Cache
-				</button>
+			<div class="tab-panel" id="translator-tab-panel">
+				<div class="control-group">
+					<label>Translate</label>
+					<button class="btn-common translate-btn" id="translateBtn">
+						Translate Story
+					</button>
+					<button class="btn-common stop-translate-btn hide" id="stopTranslateBtn">
+						Stop Translation
+					</button>
+					<div class="statusBox">
+						<p id="status">Waiting...</p>
+					</div>
+					<progress id="progressBar" value="0" max="100"></progress>
+					<div class="translator-stats">
+						<div>
+							<label for="total_words">Total Words:</label>
+							<input type="text" name="total_words" id="total_words" placeholder="0" disabled />
+						</div>
+						<div>
+							<label for="not_found_words">Not Found words:</label>
+							<input type="text" name="not_found_words" placeholder="0" id="not_found_words" disabled />
+						</div>
+						<div>
+							<label for="con_per">Conversion %:</label>
+							<input type="text" name="con_per" placeholder="0" id="con_per" disabled />
+						</div>
+					</div>
+					<a id="downloadBtn" class="hide btn-common download-link" href="#">
+						Download Translated JSON
+					</a>
+					<a id="downloadNotFoundBtn" class="hide btn-common download-link" href="#">
+						Download Not Found Words
+					</a>
+				</div>
 			</div>
 		</div>
-
 		<div class="reader-container">
 			<h1 class="story-title" id="story-main-title">
 				Select or Load a Story...
@@ -528,765 +179,6 @@
 			<div id="content-area">Story Content</div>
 			<div id="reader-status" class="loading-status">Waiting for JSON data...</div>
 		</div>
-
-		<script>
-			let storyData = null;
-			let pageKeys = [];
-			let keyIndex = 0;
-			let isLoading = false;
-			let currentLang = "eng";
-			let currentFontSize = 1.1; // Default em size
-			const readerCacheDbName = "storyReaderDB";
-			const readerCacheStoreName = "cache";
-			const readerStoryCacheId = "lastStory";
-
-			const contentArea = document.getElementById("content-area");
-			const statusDiv = document.getElementById("reader-status");
-			const titleElement = document.getElementById("story-main-title");
-			const langToggleBtn = document.getElementById("lang-toggle-btn");
-			const fileNameDisplay = document.getElementById("file-name-display");
-			const loadAllBtn = document.getElementById("load-all-btn");
-			const sideBar = document.getElementById("side-control-bar");
-			const toggleText = document.getElementById("toggle-text");
-			const translateBtn = document.getElementById("translateBtn");
-			const translateStatus = document.getElementById("status");
-			const translateProgressBar = document.getElementById("progressBar");
-			const translatedDownloadBtn = document.getElementById("downloadBtn");
-			const notFoundDownloadBtn = document.getElementById("downloadNotFoundBtn");
-			const imageFolderPathInput = document.getElementById("imageFolderPath");
-			const setImageFolderBtn = document.getElementById("setImageFolderBtn");
-			const imageFolderStatus = document.getElementById("image-folder-status");
-			const clearCacheBtn = document.getElementById("clear-cache-btn");
-			const readProgress = document.getElementById("read-progress");
-			let useLocalImageFolder = false;
-			let lastScrollSaveAt = 0;
-			let isRestoringScroll = false;
-
-			// 🔄 साइडबार को टॉगल (ओपन/क्लोज) करने का फंक्शन
-			if (contentArea) {
-				function toggleSidebar(event) {
-					if (event) event.stopPropagation();
-					sideBar.classList.toggle("open");
-					if (sideBar.classList.contains("open")) {
-						toggleText.textContent = "Close";
-					} else {
-						toggleText.textContent = "Menu";
-					}
-				}
-
-				// 🔍 फॉन्ट साइज एडजस्टमेंट फंक्शन
-				function adjustFontSize(action) {
-					currentFontSize += action;
-					// सेफ्टी लिमिट ताकि टेक्स्ट बहुत छोटा या अजीब बड़ा न हो जाए
-					if (currentFontSize < 0.8) currentFontSize = 0.8;
-					if (currentFontSize > 2.0) currentFontSize = 2.0;
-					contentArea.style.fontSize = currentFontSize + "em";
-				}
-
-				// 🎨 कस्टम बैकग्राउंड कलर हैंडलर
-				function setCustomBg(color) {
-					// अगर कस्टम कलर चुना गया है तो पहले एक्टिव थीम हटा दें
-					document.documentElement.removeAttribute("data-theme");
-					document.documentElement.style.setProperty("--bg-color", color);
-
-					// डार्क कलर डिटेक्ट करके ऑटोमैटिक टेक्स्ट कलर एडजस्ट करने का बेसिक लॉजिक
-					// (ताकि बैकग्राउंड ब्लैक करने पर टेक्स्ट गायब न हो जाए)
-					const r = parseInt(color.substr(1, 2), 16);
-					const g = parseInt(color.substr(3, 2), 16);
-					const b = parseInt(color.substr(5, 2), 16);
-					const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-
-					if (brightness < 128) {
-						document.documentElement.style.setProperty(
-							"--text-color",
-							"#ffffff",
-						);
-						document.documentElement.style.setProperty(
-							"--container-bg",
-							"#1e1e1e",
-						);
-						document.documentElement.style.setProperty(
-							"--title-color",
-							"#ffffff",
-						);
-					} else {
-						document.documentElement.style.setProperty(
-							"--text-color",
-							"#333333",
-						);
-						document.documentElement.style.setProperty(
-							"--container-bg",
-							"#ffffff",
-						);
-						document.documentElement.style.setProperty(
-							"--title-color",
-							"#111111",
-						);
-					}
-				}
-
-				// थीम सेलेक्टर चेंज हैंडलर
-				function changeTheme(themeName) {
-					// कस्टम स्टाइल रीसेट करें अगर कोई था
-					document.documentElement.style.removeProperty("--bg-color");
-					document.documentElement.style.removeProperty("--text-color");
-					document.documentElement.style.removeProperty("--container-bg");
-					document.documentElement.style.removeProperty("--title-color");
-
-					if (themeName === "light") {
-						document.documentElement.removeAttribute("data-theme");
-					} else {
-						document.documentElement.setAttribute("data-theme", themeName);
-					}
-				}
-
-				function handleFileSelect(event) {
-					const file = event.target.files[0];
-					if (!file) return;
-
-					fileNameDisplay.textContent = file.name;
-					statusDiv.textContent = "Reading selected file...";
-
-					const reader = new FileReader();
-					reader.onload = function (e) {
-						try {
-							const parsedData = JSON.parse(e.target.result);
-							initStoryRender(parsedData);
-						} catch (err) {
-							console.error(err);
-							statusDiv.textContent = "Error: Invalid JSON File structure.";
-						}
-					};
-					reader.readAsText(file);
-				}
-
-				if (translateBtn) {
-					translateBtn.addEventListener("click", translateCurrentStory);
-				}
-
-				if (setImageFolderBtn) {
-					setImageFolderBtn.addEventListener("click", setImageFolderPath);
-				}
-
-				if (clearCacheBtn) {
-					clearCacheBtn.addEventListener("click", clearReaderCache);
-				}
-
-				const savedImageFolderPath =
-					localStorage.getItem("readerImageFolderPath") || "";
-				if (imageFolderPathInput && savedImageFolderPath) {
-					imageFolderPathInput.value = savedImageFolderPath;
-					setImageFolderPath();
-				}
-
-				async function setImageFolderPath() {
-					const folderPath = imageFolderPathInput
-						? imageFolderPathInput.value.trim()
-						: "";
-
-					try {
-						const response = await fetch("/api/reader/image-folder", {
-							method: "POST",
-							headers: {
-								"Content-Type": "application/json",
-							},
-							body: JSON.stringify({ path: folderPath }),
-						});
-						const result = await response.json();
-
-						if (!response.ok || !result.success) {
-							throw new Error(result.error || "Image path not set");
-						}
-
-						useLocalImageFolder = Boolean(folderPath);
-						localStorage.setItem("readerImageFolderPath", result.path || folderPath);
-						imageFolderStatus.textContent = result.path
-							? `Image path set: ${result.path}`
-							: "Image path cleared";
-
-						if (storyData) {
-							initStoryRender(storyData);
-						}
-					} catch (err) {
-						console.error(err);
-						imageFolderStatus.textContent =
-							err.message || "Image path not set";
-					}
-				}
-
-				async function translateCurrentStory() {
-					if (!storyData) {
-						translateStatus.textContent = "Please load a JSON file first.";
-						return;
-					}
-
-					translateBtn.disabled = true;
-					translateProgressBar.value = 0;
-					translatedDownloadBtn.classList.add("hide");
-					notFoundDownloadBtn.classList.add("hide");
-					const checksum = getStoryChecksum(storyData);
-					translateStatus.textContent = `Checksum ready: ${checksum.pages} posts / ${checksum.chars} chars. Starting translation...`;
-
-					try {
-						const response = await fetch("/api/translator/translate-json", {
-							method: "POST",
-							headers: {
-								"Content-Type": "application/json",
-							},
-							body: JSON.stringify({ storyData, checksum }),
-						});
-						const result = await response.json().catch(() => ({}));
-
-						if (!response.ok || !result.success) {
-							throw new Error(result.error || "Translation failed");
-						}
-
-						watchTranslationProgress(result.jobId);
-					} catch (err) {
-						console.error(err);
-						const message =
-							err && err.message && err.message !== "Failed to fetch"
-								? err.message
-								: "Translator API not reachable. Restart server and try again.";
-						translateStatus.textContent =
-							message;
-						translateBtn.disabled = false;
-					}
-				}
-
-				function getStoryChecksum(data) {
-					const engPosts =
-						data && data.posts && data.posts.eng ? data.posts.eng : {};
-					const keys = Object.keys(engPosts).sort(
-						(a, b) => Number(a) - Number(b),
-					);
-
-					return {
-						pages: keys.length,
-						chars: keys.reduce((sum, page) => {
-							return sum + String(engPosts[page] || "").length;
-						}, 0),
-					};
-				}
-
-				function watchTranslationProgress(jobId) {
-					const source = new EventSource(`/api/translator/progress/${jobId}`);
-
-					source.onmessage = (event) => {
-						const progress = JSON.parse(event.data);
-						const total = progress.total || 0;
-						const current = progress.current || 0;
-						const percent = total ? Math.floor((current / total) * 100) : 0;
-						const checksumText = progress.checksum
-							? ` (${progress.checksum.pages} posts / ${progress.checksum.chars} chars)`
-							: "";
-						const pageText = progress.currentPage
-							? ` - post ${progress.currentPage}`
-							: "";
-						const messageText = progress.message ? `${progress.message}. ` : "";
-
-						translateProgressBar.value = percent;
-						translateStatus.textContent = progress.error
-							? progress.error
-							: `${messageText}Translated ${current}/${total} (${percent}%)${pageText}${checksumText}`;
-
-						if (progress.done) {
-							source.close();
-							translateBtn.disabled = false;
-
-							if (progress.error) return;
-
-							translateProgressBar.value = 100;
-							translateStatus.textContent = "Translation complete.";
-
-							if (progress.translatedFile) {
-								translatedDownloadBtn.href = progress.translatedFile;
-								translatedDownloadBtn.download = "translated_story.json";
-								translatedDownloadBtn.classList.remove("hide");
-								replaceLoadedStoryWithTranslated(progress.translatedFile);
-							}
-
-							if (progress.notFoundFile) {
-								notFoundDownloadBtn.href = progress.notFoundFile;
-								notFoundDownloadBtn.download = "not_found_words.json";
-								notFoundDownloadBtn.classList.remove("hide");
-							}
-						}
-					};
-
-					source.onerror = () => {
-						source.close();
-						translateBtn.disabled = false;
-						translateStatus.textContent = "Translation progress connection failed.";
-					};
-				}
-
-				async function replaceLoadedStoryWithTranslated(translatedFileUrl) {
-					try {
-						translateStatus.textContent =
-							"Translation complete. Loading translated JSON...";
-						const response = await fetch(translatedFileUrl);
-						if (!response.ok) {
-							throw new Error("Translated JSON load failed");
-						}
-
-						const translatedStory = await response.json();
-						fileNameDisplay.textContent = "translated_story.json (Loaded)";
-						initStoryRender(translatedStory);
-						translateStatus.textContent =
-							"Translation complete. Loaded translated JSON.";
-					} catch (err) {
-						console.error(err);
-						translateStatus.textContent =
-							err.message || "Translation complete, but translated JSON load failed.";
-					}
-				}
-
-				function openReaderCacheDb() {
-					return new Promise((resolve, reject) => {
-						const request = indexedDB.open(readerCacheDbName, 1);
-
-						request.onupgradeneeded = () => {
-							const db = request.result;
-							if (!db.objectStoreNames.contains(readerCacheStoreName)) {
-								db.createObjectStore(readerCacheStoreName, { keyPath: "id" });
-							}
-						};
-
-						request.onsuccess = () => resolve(request.result);
-						request.onerror = () => reject(request.error);
-					});
-				}
-
-				async function saveReaderStoryCache(data) {
-					const db = await openReaderCacheDb();
-
-					return new Promise((resolve, reject) => {
-						const tx = db.transaction(readerCacheStoreName, "readwrite");
-						tx.objectStore(readerCacheStoreName).put({
-							id: readerStoryCacheId,
-							storyData: data,
-							savedAt: new Date().toISOString(),
-						});
-						tx.oncomplete = () => {
-							db.close();
-							resolve();
-						};
-						tx.onerror = () => {
-							db.close();
-							reject(tx.error);
-						};
-					});
-				}
-
-				async function loadReaderStoryCache() {
-					const db = await openReaderCacheDb();
-
-					return new Promise((resolve, reject) => {
-						const tx = db.transaction(readerCacheStoreName, "readonly");
-						const request = tx
-							.objectStore(readerCacheStoreName)
-							.get(readerStoryCacheId);
-
-						request.onsuccess = () => {
-							resolve(request.result ? request.result.storyData : null);
-						};
-						request.onerror = () => reject(request.error);
-						tx.oncomplete = () => db.close();
-						tx.onerror = () => {
-							db.close();
-							reject(tx.error);
-						};
-					});
-				}
-
-				async function clearReaderCache() {
-					const confirmed = window.confirm(
-						"Clear cached story and saved reading positions?",
-					);
-					if (!confirmed) return;
-
-					if (clearCacheBtn) clearCacheBtn.disabled = true;
-					statusDiv.textContent = "Clearing cache...";
-
-					try {
-						const db = await openReaderCacheDb();
-						await new Promise((resolve, reject) => {
-							const tx = db.transaction(readerCacheStoreName, "readwrite");
-							tx.objectStore(readerCacheStoreName).delete(readerStoryCacheId);
-							tx.oncomplete = () => {
-								db.close();
-								resolve();
-							};
-							tx.onerror = () => {
-								db.close();
-								reject(tx.error);
-							};
-						});
-
-						for (let i = localStorage.length - 1; i >= 0; i--) {
-							const key = localStorage.key(i);
-							if (key && key.startsWith("readerScroll:")) {
-								localStorage.removeItem(key);
-							}
-						}
-
-						fileNameDisplay.textContent = storyData
-							? "Cache cleared"
-							: "No file chosen";
-						statusDiv.textContent =
-							"Cache cleared. Reload will not auto-load this story.";
-						updateReadProgress();
-					} catch (err) {
-						console.error(err);
-						statusDiv.textContent = err.message || "Cache clear failed.";
-					} finally {
-						if (clearCacheBtn) clearCacheBtn.disabled = false;
-					}
-				}
-
-				async function loadStoryJson() {
-					try {
-						const cachedStory = await loadReaderStoryCache();
-						if (cachedStory) {
-							fileNameDisplay.textContent = "Cached story JSON (Auto-loaded)";
-							initStoryRender(cachedStory, { saveToCache: false });
-							return;
-						}
-					} catch (err) {
-						console.warn("Reader cache load failed:", err.message);
-					}
-
-					try {
-						const response = await fetch("./story_data.json");
-						if (!response.ok) throw new Error("Local file not found");
-						const data = await response.json();
-						fileNameDisplay.textContent = "story_data.json (Auto-loaded)";
-						initStoryRender(data);
-					} catch (err) {
-						console.log(
-							"No local story_data.json found automatically. Ready for manual browse.",
-						);
-						statusDiv.textContent =
-							"Please browse and select your story_data.json file to start reading.";
-					}
-				}
-
-				function initStoryRender(data, options = {}) {
-					contentArea.innerHTML = "";
-					storyData = data;
-					keyIndex = 0;
-					isLoading = false;
-					statusDiv.textContent = "";
-					if (loadAllBtn) loadAllBtn.style.display = "inline-block";
-
-					if (storyData && storyData.storyName) {
-						titleElement.textContent = storyData.storyName;
-						document.title = storyData.storyName + " - Offline Reader";
-					}
-
-					if (storyData && storyData.posts && storyData.posts.eng) {
-						pageKeys = Object.keys(storyData.posts.eng).sort(
-							(a, b) => Number(a) - Number(b),
-						);
-					}
-
-					if (options.saveToCache !== false) {
-						saveReaderStoryCache(storyData).catch((err) => {
-							console.warn("Reader cache save failed:", err.message);
-						});
-					}
-
-					loadNextPage();
-					restoreReaderScrollSoon();
-				}
-
-				function getReaderScrollKey() {
-					if (!storyData) return "";
-
-					const posts = storyData.posts && storyData.posts.eng
-						? storyData.posts.eng
-						: {};
-					const identity = [
-						storyData.url || "",
-						storyData.storyName || "",
-						storyData["writer-name"] || "",
-						Object.keys(posts).length,
-					].join("|");
-
-					return `readerScroll:${identity}`;
-				}
-
-				function getReadPercent() {
-					const scrollTop = window.scrollY || document.documentElement.scrollTop || 0;
-					const scrollable = Math.max(
-						0,
-						document.documentElement.scrollHeight - window.innerHeight,
-					);
-
-					return scrollable ? Math.min(100, Math.round((scrollTop / scrollable) * 100)) : 0;
-				}
-
-				function updateReadProgress() {
-					if (!readProgress) return;
-					readProgress.textContent = `Read: ${getReadPercent()}%`;
-				}
-
-				function saveReaderScroll(force = false) {
-					if (!storyData || isRestoringScroll) return;
-
-					const now = Date.now();
-					if (!force && now - lastScrollSaveAt < 3000) return;
-
-					const key = getReaderScrollKey();
-					if (!key) return;
-
-					lastScrollSaveAt = now;
-					localStorage.setItem(
-						key,
-						JSON.stringify({
-							y: Math.max(0, window.scrollY || document.documentElement.scrollTop || 0),
-							percent: getReadPercent(),
-							updatedAt: new Date().toISOString(),
-						}),
-					);
-				}
-
-				async function restoreReaderScrollSoon() {
-					const key = getReaderScrollKey();
-					if (!key) return;
-
-					let saved = null;
-					try {
-						saved = JSON.parse(localStorage.getItem(key) || "null");
-					} catch (err) {
-						saved = null;
-					}
-
-					if (!saved || !Number.isFinite(Number(saved.y)) || Number(saved.y) <= 0) {
-						updateReadProgress();
-						return;
-					}
-
-					isRestoringScroll = true;
-					const targetY = Number(saved.y);
-
-					for (let attempt = 0; attempt < 30; attempt++) {
-						const scrollableHeight = document.documentElement.scrollHeight;
-						if (scrollableHeight >= targetY + window.innerHeight || keyIndex >= pageKeys.length) {
-							break;
-						}
-						isLoading = false;
-						loadNextPage();
-						await new Promise((resolve) => setTimeout(resolve, 80));
-					}
-
-					setTimeout(() => {
-						window.scrollTo({ top: targetY, behavior: "auto" });
-						updateReadProgress();
-						isRestoringScroll = false;
-					}, 120);
-				}
-
-				function normalizeStoryImages(container) {
-					const images = container.getElementsByTagName("img");
-
-					for (let img of images) {
-						const currentSrc = img.getAttribute("src");
-						if (!currentSrc) continue;
-
-						const fileName = getImageFileName(currentSrc);
-
-						if (useLocalImageFolder && fileName) {
-							img.setAttribute(
-								"src",
-								`/local-images/${encodeURIComponent(fileName)}`,
-							);
-							continue;
-						}
-
-						if (currentSrc.includes("/temp/images/")) {
-							img.setAttribute(
-								"src",
-								currentSrc.replace(/\/temp\/images\//g, "./images/"),
-							);
-						} else if (currentSrc.startsWith("images/")) {
-							img.setAttribute("src", "./" + currentSrc);
-						} else if (
-							!currentSrc.startsWith("./images/") &&
-							!currentSrc.startsWith("http")
-						) {
-							img.setAttribute("src", "./images/" + fileName);
-						}
-					}
-				}
-
-				function getImageFileName(src) {
-					const cleanSrc = String(src).split("?")[0].split("#")[0];
-					const parts = cleanSrc.replace(/\\/g, "/").split("/");
-					return parts[parts.length - 1] || "";
-				}
-
-				function loadNextPage() {
-					if (isLoading || !storyData || pageKeys.length === 0) return;
-
-					if (keyIndex >= pageKeys.length) {
-						statusDiv.textContent = "— End of Story —";
-						if (loadAllBtn) loadAllBtn.style.display = "none";
-						return;
-					}
-
-					isLoading = true;
-					const actualPageNum = pageKeys[keyIndex];
-					statusDiv.textContent =
-						"Checking Content Part " + actualPageNum + "...";
-
-					let pageHtml = storyData.posts[currentLang]
-						? storyData.posts[currentLang][actualPageNum]
-						: "";
-					const isHtmlEmpty =
-						!pageHtml || pageHtml.replace(/<[^>]*>/g, "").trim() === "";
-
-					if (!isHtmlEmpty) {
-						const pageDiv = document.createElement("div");
-						pageDiv.className = "story-page";
-						pageDiv.setAttribute("data-page-num", actualPageNum);
-
-						const tempDiv = document.createElement("div");
-						tempDiv.innerHTML = pageHtml;
-
-						normalizeStoryImages(tempDiv);
-
-						pageDiv.innerHTML = tempDiv.innerHTML;
-						contentArea.appendChild(pageDiv);
-
-						keyIndex++;
-						statusDiv.textContent = "";
-						isLoading = false;
-
-						setTimeout(() => {
-							const docHeight = Math.max(
-								document.body.scrollHeight,
-								document.documentElement.scrollHeight,
-								document.body.offsetHeight,
-							);
-							if (
-								docHeight <= window.innerHeight &&
-								keyIndex < pageKeys.length
-							) {
-								loadNextPage();
-							}
-						}, 100);
-					} else {
-						const pageDiv = document.createElement("div");
-						pageDiv.className = "story-page";
-						pageDiv.setAttribute("data-page-num", actualPageNum);
-						pageDiv.innerHTML = `<p style="color: #999; font-style: italic; text-align: center;">[Part ${actualPageNum} Content Not Available in ${currentLang === "eng" ? "English" : "Hindi"}]</p>`;
-						contentArea.appendChild(pageDiv);
-
-						keyIndex++;
-						isLoading = false;
-
-						setTimeout(() => {
-							loadNextPage();
-						}, 50);
-					}
-				}
-
-				function loadWholeStory() {
-					if (!storyData || pageKeys.length === 0) return;
-					statusDiv.textContent = "Loading all parts together...";
-					while (keyIndex < pageKeys.length) {
-						isLoading = false;
-						loadNextPage();
-					}
-					if (loadAllBtn) loadAllBtn.style.display = "none";
-				}
-
-				function handlePrint() {
-					if (keyIndex < pageKeys.length) {
-						const confirmPrint = confirm(
-							"पूरी कहानी अभी लोड नहीं हुई है। क्या आप प्रिंट करने से पहले सभी पार्ट्स लोड करना चाहते हैं?",
-						);
-						if (confirmPrint) {
-							loadWholeStory();
-							setTimeout(() => {
-								window.print();
-							}, 500);
-						} else {
-							window.print();
-						}
-					} else {
-						window.print();
-					}
-				}
-
-				function toggleLanguage() {
-					if (!storyData) return;
-
-					if (currentLang === "eng") {
-						currentLang = "hindi";
-						langToggleBtn.textContent = "🌐 Switch to English";
-						langToggleBtn.style.background = "#28a745";
-					} else {
-						currentLang = "eng";
-						langToggleBtn.textContent = "🌐 Switch to Hindi";
-						langToggleBtn.style.background = "#007bff";
-					}
-
-					const loadedPages = contentArea.getElementsByClassName("story-page");
-
-					for (let i = 0; i < loadedPages.length; i++) {
-						const pNum = loadedPages[i].getAttribute("data-page-num");
-						let newHtml = storyData.posts[currentLang]
-							? storyData.posts[currentLang][pNum]
-							: "";
-						const isHtmlEmpty =
-							!newHtml || newHtml.replace(/<[^>]*>/g, "").trim() === "";
-
-						if (!isHtmlEmpty) {
-							const tempDiv = document.createElement("div");
-							tempDiv.innerHTML = newHtml;
-							normalizeStoryImages(tempDiv);
-							loadedPages[i].innerHTML = tempDiv.innerHTML;
-						} else {
-							loadedPages[i].innerHTML =
-								`<p style="color: #999; font-style: italic; text-align: center;">[Part ${pNum} Content Not Available in ${currentLang === "eng" ? "English" : "Hindi"}]</p>`;
-						}
-					}
-				}
-
-				window.addEventListener("scroll", () => {
-					updateReadProgress();
-					saveReaderScroll();
-
-					const totalHeight =
-						document.documentElement.scrollHeight || document.body.scrollHeight;
-					const currentScroll =
-						window.innerHeight +
-						(window.scrollY || document.documentElement.scrollTop);
-					if (currentScroll >= totalHeight - 800) {
-						loadNextPage();
-					}
-				});
-
-				window.addEventListener("beforeunload", () => {
-					saveReaderScroll(true);
-				});
-
-				// बाहर कहीं क्लिक करने पर साइडबार अपने आप बंद हो जाए
-				document.addEventListener("click", (e) => {
-					if (
-						!sideBar.contains(e.target) &&
-						!e.target.closest(".sidebar-toggle-btn")
-					) {
-						sideBar.classList.remove("open");
-						toggleText.textContent = "Menu";
-					}
-				});
-
-				loadStoryJson();
-			}
-		</script>
+		<script src="./js/reader.js"></script>
 	</body>
 </html>
