@@ -62,6 +62,17 @@
 	border-radius: 8px;
 }
 
+.common-sidebar-controls {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+}
+
+.common-sidebar-controls .control-group:last-child {
+	padding-bottom: 0;
+	border-bottom: 0;
+}
+
 .sidebar-tab-btn {
 	padding: 10px 8px;
 	color: var(--text-color);

@@ -635,19 +635,20 @@ let storyData = null;
 					return `readerScroll:${identity}`;
 				}
 
-				function getReadPercent() {
-					const scrollTop = window.scrollY || document.documentElement.scrollTop || 0;
-					const scrollable = Math.max(
-						0,
-						document.documentElement.scrollHeight - window.innerHeight,
-					);
+				function getLoadedPostPercent() {
+					if (!pageKeys.length) return 0;
 
-					return scrollable ? Math.min(100, Math.round((scrollTop / scrollable) * 100)) : 0;
+					return Math.min(
+						100,
+						Math.round((Math.min(keyIndex, pageKeys.length) / pageKeys.length) * 100),
+					);
 				}
 
 				function updateReadProgress() {
 					if (!readProgress) return;
-					readProgress.textContent = `Read: ${getReadPercent()}%`;
+					readProgress.textContent = pageKeys.length
+						? `Loaded: ${Math.min(keyIndex, pageKeys.length)}/${pageKeys.length} posts (${getLoadedPostPercent()}%)`
+						: "Loaded: 0/0 posts (0%)";
 				}
 
 				function saveReaderScroll(force = false) {
@@ -664,7 +665,7 @@ let storyData = null;
 						key,
 						JSON.stringify({
 							y: Math.max(0, window.scrollY || document.documentElement.scrollTop || 0),
-							percent: getReadPercent(),
+							percent: getLoadedPostPercent(),
 							updatedAt: new Date().toISOString(),
 						}),
 					);
@@ -779,6 +780,7 @@ let storyData = null;
 						contentArea.appendChild(pageDiv);
 
 						keyIndex++;
+						updateReadProgress();
 						statusDiv.textContent = "";
 						isLoading = false;
 
@@ -803,6 +805,7 @@ let storyData = null;
 						contentArea.appendChild(pageDiv);
 
 						keyIndex++;
+						updateReadProgress();
 						isLoading = false;
 
 						setTimeout(() => {

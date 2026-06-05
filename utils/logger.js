@@ -2,8 +2,10 @@ const fs = require("fs");
 const path = require("path");
 
 const logsFolder = path.join(__dirname, "..", "logs");
-const serverLogPath = path.join(logsFolder, "server.log");
+const serverLogPath = path.join(logsFolder, "site-log.log");
 const crashLogPath = path.join(logsFolder, "server-crash.log");
+const settingsFolder = path.join(__dirname, "..", "data");
+const settingsPath = path.join(settingsFolder, "admin-settings.json");
 const maxLogBytes = 20 * 1024 * 1024;
 const originalConsole = {
     log: console.log.bind(console),
@@ -13,9 +15,49 @@ const originalConsole = {
 };
 
 let isConsolePatched = false;
+let fileLoggingEnabledCache = null;
 
 function ensureLogsFolder() {
     fs.mkdirSync(logsFolder, { recursive: true });
+}
+
+function ensureSettingsFolder() {
+    fs.mkdirSync(settingsFolder, { recursive: true });
+}
+
+function readSettings() {
+    try {
+        if (!fs.existsSync(settingsPath)) {
+            return { fileLoggingEnabled: true };
+        }
+
+        const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+        return {
+            fileLoggingEnabled: settings.fileLoggingEnabled !== false,
+        };
+    } catch (err) {
+        originalConsole.error("Could not read admin settings:", err.message);
+        return { fileLoggingEnabled: true };
+    }
+}
+
+function writeSettings(settings) {
+    ensureSettingsFolder();
+    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+}
+
+function isFileLoggingEnabled() {
+    if (fileLoggingEnabledCache === null) {
+        fileLoggingEnabledCache = readSettings().fileLoggingEnabled;
+    }
+
+    return fileLoggingEnabledCache;
+}
+
+function setFileLoggingEnabled(enabled) {
+    fileLoggingEnabledCache = Boolean(enabled);
+    writeSettings({ fileLoggingEnabled: fileLoggingEnabledCache });
+    return fileLoggingEnabledCache;
 }
 
 function formatValue(value) {
@@ -34,6 +76,8 @@ function formatValue(value) {
 
 function writeLine(level, values, filePath = serverLogPath) {
     try {
+        if (filePath === serverLogPath && !isFileLoggingEnabled()) return;
+
         ensureLogsFolder();
         rotateLogIfNeeded(filePath);
         const message = values.map(formatValue).join(" ");
@@ -88,6 +132,8 @@ module.exports = {
     patchConsole,
     logCrash,
     logMemory,
+    isFileLoggingEnabled,
+    setFileLoggingEnabled,
     serverLogPath,
     crashLogPath,
 };

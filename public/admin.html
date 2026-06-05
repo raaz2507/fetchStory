@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Admin Panel</title>
+		<link rel="stylesheet" href="./css/admin.css" />
+	</head>
+	<body>
+		<section id="loginView" class="loginView" aria-label="Admin login">
+			<form id="loginForm" class="loginCard">
+				<span class="eyebrow">Secure Admin</span>
+				<h1>Admin Login</h1>
+				<label>
+					<span>Username</span>
+					<input id="loginUsername" type="text" autocomplete="username" required />
+				</label>
+				<label>
+					<span>Password</span>
+					<div class="passwordField">
+						<input id="loginPassword" type="password" autocomplete="current-password" required />
+						<button class="passwordToggle" type="button" data-password-toggle aria-label="Show password" title="Show password">
+							<svg viewBox="0 0 640 640" aria-hidden="true">
+								<path d="M320 96C239.2 96 174.5 132.8 127.4 176.6C80.6 220.1 49.3 272 34.4 307.7C31.1 315.6 31.1 324.4 34.4 332.3C49.3 368 80.6 420 127.4 463.4C174.5 507.1 239.2 544 320 544C400.8 544 465.5 507.2 512.6 463.4C559.4 419.9 590.7 368 605.6 332.3C608.9 324.4 608.9 315.6 605.6 307.7C590.7 272 559.4 220 512.6 176.6C465.5 132.9 400.8 96 320 96zM176 320C176 240.5 240.5 176 320 176C399.5 176 464 240.5 464 320C464 399.5 399.5 464 320 464C240.5 464 176 399.5 176 320zM320 256C320 291.3 291.3 320 256 320C244.5 320 233.7 317 224.3 311.6C223.3 322.5 224.2 333.7 227.2 344.8C240.9 396 293.6 426.4 344.8 412.7C396 399 426.4 346.3 412.7 295.1C400.5 249.4 357.2 220.3 311.6 224.3C316.9 233.6 320 244.4 320 256z"/>
+							</svg>
+						</button>
+					</div>
+				</label>
+				<button type="submit">Login</button>
+				<p id="loginMessage"></p>
+			</form>
+		</section>
+
+		<section id="adminView" hidden>
+		<header class="topBar">
+			<div>
+				<span class="eyebrow">Story Scraper</span>
+				<h1>Admin Panel</h1>
+			</div>
+			<nav class="topActions" aria-label="Admin actions">
+				<span id="currentUserLabel" class="currentUser">-</span>
+				<a href="./index.html">Story App</a>
+				<button id="refreshBtn" type="button">Refresh</button>
+				<button id="logoutBtn" class="dangerBtn" type="button">Logout</button>
+			</nav>
+		</header>
+
+		<main class="adminShell">
+			<section class="statusGrid" aria-label="Admin status">
+				<article class="metric">
+					<span>Scraped Stories</span>
+					<strong id="scrapedCount">0</strong>
+				</article>
+				<article class="metric">
+					<span>Translated Stories</span>
+					<strong id="translatedCount">0</strong>
+				</article>
+				<article class="metric">
+					<span>Output Files</span>
+					<strong id="outputCount">0</strong>
+				</article>
+				<article class="metric">
+					<span>Output Size</span>
+					<strong id="outputSize">0 B</strong>
+				</article>
+				<article class="metric">
+					<span>Users</span>
+					<strong id="userCount">0</strong>
+				</article>
+				<article class="metric">
+					<span>Pending</span>
+					<strong id="pendingCount">0</strong>
+				</article>
+			</section>
+
+			<section class="controlGrid" aria-label="Admin controls">
+				<article class="panel">
+					<div class="panelHeader">
+						<div>
+							<h2>Site Log</h2>
+							<p>Logs folder me site-log file banana on/off kare.</p>
+						</div>
+						<label class="switch" for="loggingToggle">
+							<input id="loggingToggle" type="checkbox" />
+							<span></span>
+						</label>
+					</div>
+					<ul id="logFiles" class="fileList"></ul>
+				</article>
+
+				<article class="panel">
+					<div class="panelHeader">
+						<div>
+							<h2>Translator Outputs</h2>
+							<p>Translated story aur not-found words files clear kare.</p>
+						</div>
+						<button id="clearOutputsBtn" class="dangerBtn" type="button">Clear Outputs</button>
+					</div>
+					<ul id="outputFiles" class="fileList"></ul>
+				</article>
+			</section>
+
+			<section class="panel">
+				<div class="panelHeader">
+					<div>
+						<h2>User Management</h2>
+						<p>Users list, role, block/unblock aur last login dekh sakte hain.</p>
+					</div>
+				</div>
+				<form id="addUserForm" class="inlineForm">
+					<input id="newUsername" type="text" placeholder="Username" required />
+					<div class="passwordField">
+						<input id="newPassword" type="password" placeholder="Password" required />
+						<button class="passwordToggle" type="button" data-password-toggle aria-label="Show password" title="Show password">
+							<svg viewBox="0 0 640 640" aria-hidden="true">
+								<path d="M320 96C239.2 96 174.5 132.8 127.4 176.6C80.6 220.1 49.3 272 34.4 307.7C31.1 315.6 31.1 324.4 34.4 332.3C49.3 368 80.6 420 127.4 463.4C174.5 507.1 239.2 544 320 544C400.8 544 465.5 507.2 512.6 463.4C559.4 419.9 590.7 368 605.6 332.3C608.9 324.4 608.9 315.6 605.6 307.7C590.7 272 559.4 220 512.6 176.6C465.5 132.9 400.8 96 320 96zM176 320C176 240.5 240.5 176 320 176C399.5 176 464 240.5 464 320C464 399.5 399.5 464 320 464C240.5 464 176 399.5 176 320zM320 256C320 291.3 291.3 320 256 320C244.5 320 233.7 317 224.3 311.6C223.3 322.5 224.2 333.7 227.2 344.8C240.9 396 293.6 426.4 344.8 412.7C396 399 426.4 346.3 412.7 295.1C400.5 249.4 357.2 220.3 311.6 224.3C316.9 233.6 320 244.4 320 256z"/>
+							</svg>
+						</button>
+					</div>
+					<select id="newRole">
+						<option value="user">user</option>
+						<option value="editor">editor</option>
+						<option value="admin">admin</option>
+					</select>
+					<button type="submit">Add User</button>
+				</form>
+				<div class="tableWrap">
+					<table>
+						<thead>
+							<tr>
+								<th>User</th>
+								<th>Role</th>
+								<th>Status</th>
+								<th>Last Login</th>
+								<th>New Password</th>
+								<th>Actions</th>
+							</tr>
+						</thead>
+						<tbody id="userRows"></tbody>
+					</table>
+				</div>
+			</section>
+
+			<section class="panel">
+				<div class="panelHeader">
+					<div>
+						<h2>Content Moderation</h2>
+						<p>Pending approvals, reported content, duplicate detection aur quick review.</p>
+					</div>
+				</div>
+				<div class="moderationGrid">
+					<section>
+						<h3>Pending / Reported</h3>
+						<div id="moderationItems" class="reviewList"></div>
+					</section>
+					<section>
+						<h3>Spam / Duplicate Detection</h3>
+						<div id="duplicateItems" class="reviewList"></div>
+					</section>
+				</div>
+			</section>
+
+			<section class="panel">
+				<div class="panelHeader">
+					<div>
+						<h2>Settings Backup</h2>
+						<p>Admin users, settings, activity aur moderation JSON me save/restore.</p>
+					</div>
+					<div class="buttonRow">
+						<button id="exportStoreBtn" type="button">Export JSON</button>
+						<button id="restoreStoreBtn" type="button">Restore JSON</button>
+					</div>
+				</div>
+				<textarea id="storeJsonBox" spellcheck="false" placeholder="Export JSON yahan aayega. Restore ke liye JSON paste karke Restore JSON dabaye."></textarea>
+			</section>
+
+			<section class="panel">
+				<div class="panelHeader">
+					<div>
+						<h2>Scraped Story List</h2>
+						<p>Kaunsi story kab scrape hui aur kitni progress hui.</p>
+					</div>
+				</div>
+				<div class="tableWrap">
+					<table>
+						<thead>
+							<tr>
+								<th>Story</th>
+								<th>Writer</th>
+								<th>Posts</th>
+								<th>Last Page</th>
+								<th>Images</th>
+								<th>Scraped At</th>
+								<th>Duration</th>
+							</tr>
+						</thead>
+						<tbody id="scrapedRows"></tbody>
+					</table>
+				</div>
+			</section>
+
+			<section class="panel">
+				<div class="panelHeader">
+					<div>
+						<h2>Translated Story List</h2>
+						<p>Kaunsi story translate hui aur output file kahan hai.</p>
+					</div>
+				</div>
+				<div class="tableWrap">
+					<table>
+						<thead>
+							<tr>
+								<th>Story</th>
+								<th>Writer</th>
+								<th>Hindi Posts</th>
+								<th>Translated At</th>
+								<th>Size</th>
+								<th>Files</th>
+							</tr>
+						</thead>
+						<tbody id="translatedRows"></tbody>
+					</table>
+				</div>
+			</section>
+
+			<section class="panel">
+				<div class="panelHeader">
+					<div>
+						<h2>User Activity</h2>
+						<p>Admin panel me important actions ka record.</p>
+					</div>
+				</div>
+				<div id="activityList" class="activityList"></div>
+			</section>
+		</main>
+		</section>
+
+		<div id="toast" class="toast" role="status" aria-live="polite"></div>
+		<script src="./js/admin.js"></script>
+	</body>
+</html>

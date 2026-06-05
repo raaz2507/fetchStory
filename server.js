@@ -5,8 +5,11 @@ const { patchConsole, logCrash, logMemory } = require("./utils/logger");
 
 const storyRoutes = require("./routes/storyRoutes");
 const readerRoutes = require("./routes/readerRoutes");
+const adminRoutes = require("./routes/adminRoutes");
+const authRoutes = require("./routes/authRoutes");
 const translatorRoutes = require("./translator/routes/translateRoute");
 const translatorProgressRoutes = require("./translator/routes/progressRoute");
+const { requirePublicAuth, redirectToPublicLogin } = require("./controllers/adminController");
 
 patchConsole();
 
@@ -22,6 +25,10 @@ const app = express();
 
 app.use(cors());
 app.use(express.json({ limit: "50mb" }));
+
+app.use("/api/auth", authRoutes);
+
+app.get(["/", "/index.html", "/reader_template.html"], redirectToPublicLogin);
 app.use(express.static("public"));
 
 app.use((req, res, next) => {
@@ -36,10 +43,11 @@ app.use((req, res, next) => {
     next();
 });
 
-app.use("/api/story", storyRoutes);
-app.use(readerRoutes);
-app.use("/api/translator", translatorRoutes);
-app.use("/api/translator", translatorProgressRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api/story", requirePublicAuth, storyRoutes);
+app.use(requirePublicAuth, readerRoutes);
+app.use("/api/translator", requirePublicAuth, translatorRoutes);
+app.use("/api/translator", requirePublicAuth, translatorProgressRoutes);
 
 app.use("/temp", express.static(path.join(__dirname, "temp")));
 app.use('/temp/images', express.static(path.join(__dirname, 'temp', 'images')));

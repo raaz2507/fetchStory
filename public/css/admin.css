@@ -1,0 +1,463 @@
+@import url("./base.css");
+
+body {
+	margin: 0;
+	color: var(--text);
+	background: var(--page-bg);
+}
+
+button,
+a {
+	font: inherit;
+}
+
+[hidden] {
+	display: none !important;
+}
+
+button,
+.topActions a {
+	min-height: 2.35rem;
+	padding: 0.5rem 0.8rem;
+	color: #fff;
+	background: var(--accent);
+	border: 1px solid var(--accent);
+	border-radius: 6px;
+	cursor: pointer;
+	text-decoration: none;
+}
+
+button:hover,
+.topActions a:hover {
+	background: var(--accent-strong);
+}
+
+.dangerBtn {
+	background: var(--danger);
+	border-color: var(--danger);
+}
+
+.dangerBtn:hover {
+	background: var(--danger-strong);
+}
+
+.topBar {
+	position: sticky;
+	top: 0;
+	z-index: 10;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+	padding: 1rem 1.25rem;
+	background: var(--bar-bg);
+	border-bottom: 1px solid var(--glass-border);
+	backdrop-filter: var(--glass-blur);
+}
+
+.loginView {
+	display: grid;
+	min-height: 100vh;
+	place-items: center;
+	padding: 1rem;
+}
+
+.loginCard {
+	display: grid;
+	gap: 0.85rem;
+	width: min(100%, 24rem);
+	padding: 1.25rem;
+	background: var(--glass-bg);
+	border: 1px solid var(--glass-border);
+	border-radius: 8px;
+	box-shadow: var(--shadow);
+	backdrop-filter: var(--glass-blur);
+}
+
+.loginCard h1 {
+	margin: 0;
+	font-size: 1.45rem;
+}
+
+.loginCard label,
+.inlineForm {
+	display: grid;
+	gap: 0.35rem;
+}
+
+.loginCard label span {
+	color: var(--muted);
+	font-size: 0.86rem;
+	font-weight: 700;
+}
+
+.loginCard input,
+.inlineForm input,
+.inlineForm select,
+td select,
+textarea {
+	width: 100%;
+	min-width: 0;
+	min-height: 2.35rem;
+	padding: 0.5rem 0.6rem;
+	color: var(--text);
+	background: var(--field-bg);
+	border: 1px solid var(--border-strong);
+	border-radius: 6px;
+}
+
+.passwordField {
+	position: relative;
+}
+
+.passwordField input {
+	min-width: 0;
+	padding-right: 2.8rem;
+}
+
+.passwordToggle {
+	position: absolute;
+	top: 50%;
+	right: 0.25rem;
+	display: grid;
+	width: 2rem;
+	height: 2rem;
+	min-height: 0;
+	place-items: center;
+	padding: 0;
+	color: var(--muted);
+	background: transparent;
+	border: 0;
+	border-radius: 6px;
+	transform: translateY(-50%);
+}
+
+.passwordToggle:hover {
+	color: var(--accent);
+	background: var(--surface-soft);
+}
+
+.passwordToggle svg {
+	width: 1.15rem;
+	height: 1.15rem;
+	fill: currentColor;
+}
+
+.loginCard p {
+	min-height: 1.2rem;
+	margin: 0;
+	color: var(--danger);
+	font-size: 0.9rem;
+}
+
+.topBar h1 {
+	margin: 0.1rem 0 0;
+	font-size: 1.5rem;
+}
+
+.eyebrow {
+	color: var(--muted);
+	font-size: 0.75rem;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+}
+
+.topActions {
+	display: flex;
+	gap: 0.6rem;
+	align-items: center;
+}
+
+.currentUser {
+	color: var(--muted);
+	font-size: 0.88rem;
+	font-weight: 700;
+}
+
+.adminShell {
+	display: grid;
+	gap: 1rem;
+	width: min(1180px, calc(100% - 2rem));
+	margin: 1rem auto 4rem;
+}
+
+.statusGrid,
+.controlGrid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+	gap: 0.8rem;
+}
+
+.controlGrid {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.inlineForm {
+	grid-template-columns: 1fr 1fr minmax(8rem, 0.5fr) auto;
+	margin-bottom: 0.9rem;
+}
+
+.metric,
+.panel {
+	background: var(--glass-bg);
+	border: 1px solid var(--glass-border);
+	border-radius: 8px;
+	box-shadow: var(--shadow);
+	backdrop-filter: var(--glass-blur);
+}
+
+.metric {
+	display: grid;
+	gap: 0.35rem;
+	padding: 1rem;
+}
+
+.metric span,
+.panel p,
+td small {
+	color: var(--muted);
+}
+
+.metric strong {
+	font-size: 1.55rem;
+}
+
+.panel {
+	min-width: 0;
+	padding: 1rem;
+}
+
+.panelHeader {
+	display: flex;
+	align-items: start;
+	justify-content: space-between;
+	gap: 1rem;
+	margin-bottom: 0.85rem;
+}
+
+.panel h2 {
+	margin: 0;
+	font-size: 1rem;
+}
+
+.panel p {
+	margin: 0.25rem 0 0;
+	font-size: 0.88rem;
+	line-height: 1.4;
+}
+
+.switch {
+	position: relative;
+	display: inline-flex;
+	width: 3.3rem;
+	height: 1.8rem;
+	flex: 0 0 auto;
+}
+
+.switch input {
+	position: absolute;
+	opacity: 0;
+}
+
+.switch span {
+	position: absolute;
+	inset: 0;
+	background: var(--neutral);
+	border-radius: 999px;
+	cursor: pointer;
+	transition: background 160ms ease;
+}
+
+.switch span::after {
+	content: "";
+	position: absolute;
+	top: 0.25rem;
+	left: 0.25rem;
+	width: 1.3rem;
+	height: 1.3rem;
+	background: #fff;
+	border-radius: 50%;
+	transition: transform 160ms ease;
+}
+
+.switch input:checked + span {
+	background: var(--success);
+}
+
+.switch input:checked + span::after {
+	transform: translateX(1.5rem);
+}
+
+.fileList {
+	display: grid;
+	gap: 0.45rem;
+	max-height: 13rem;
+	margin: 0;
+	padding: 0;
+	overflow: auto;
+	list-style: none;
+}
+
+.fileList li {
+	display: flex;
+	justify-content: space-between;
+	gap: 0.75rem;
+	padding: 0.5rem 0.6rem;
+	background: var(--surface-soft);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	font-size: 0.86rem;
+	overflow-wrap: anywhere;
+}
+
+.tableWrap {
+	overflow-x: auto;
+}
+
+table {
+	width: 100%;
+	border-collapse: collapse;
+	min-width: 760px;
+}
+
+th,
+td {
+	padding: 0.7rem 0.6rem;
+	border-bottom: 1px solid var(--border);
+	text-align: left;
+	vertical-align: top;
+}
+
+th {
+	color: var(--muted);
+	font-size: 0.78rem;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+td {
+	font-size: 0.9rem;
+}
+
+td a {
+	color: var(--accent-strong);
+	font-weight: 700;
+}
+
+.buttonRow {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+	align-items: center;
+}
+
+.buttonRow button {
+	min-height: 2rem;
+	padding: 0.35rem 0.6rem;
+}
+
+.storyCell {
+	display: grid;
+	gap: 0.2rem;
+	max-width: 28rem;
+}
+
+.storyCell span {
+	font-weight: 700;
+}
+
+.emptyRow {
+	padding: 1.2rem 0.6rem;
+	color: var(--muted);
+	text-align: center;
+}
+
+.moderationGrid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 0.9rem;
+}
+
+.moderationGrid h3 {
+	margin: 0 0 0.55rem;
+	color: var(--muted);
+	font-size: 0.86rem;
+}
+
+.reviewList,
+.activityList {
+	display: grid;
+	gap: 0.55rem;
+}
+
+.reviewItem,
+.activityList article {
+	display: grid;
+	gap: 0.3rem;
+	padding: 0.65rem;
+	background: var(--surface-soft);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+}
+
+.reviewItem small,
+.activityList small,
+.activityList span,
+.emptyText {
+	color: var(--muted);
+	font-size: 0.86rem;
+}
+
+textarea {
+	min-height: 12rem;
+	resize: vertical;
+	font-family: Consolas, Monaco, "Courier New", monospace;
+	font-size: 0.86rem;
+	line-height: 1.5;
+}
+
+.toast {
+	position: fixed;
+	right: 1rem;
+	bottom: 1rem;
+	max-width: min(30rem, calc(100vw - 2rem));
+	padding: 0.75rem 0.9rem;
+	color: var(--text);
+	background: var(--glass-bg-strong);
+	border: 1px solid var(--glass-border);
+	border-radius: 8px;
+	box-shadow: var(--shadow);
+	opacity: 0;
+	transform: translateY(0.5rem);
+	pointer-events: none;
+	transition:
+		opacity 160ms ease,
+		transform 160ms ease;
+}
+
+.toast.is-visible {
+	opacity: 1;
+	transform: translateY(0);
+}
+
+@media (max-width: 860px) {
+	.topBar,
+	.panelHeader {
+		display: grid;
+	}
+
+	.statusGrid,
+	.controlGrid {
+		grid-template-columns: 1fr;
+	}
+
+	.topActions {
+		justify-content: start;
+	}
+
+	.inlineForm,
+	.moderationGrid {
+		grid-template-columns: 1fr;
+	}
+}

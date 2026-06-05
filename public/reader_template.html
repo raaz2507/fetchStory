@@ -12,24 +12,7 @@
 		</button>
 
 		<div class="side-control-bar" id="side-control-bar">
-			<div class="sidebar-tabs">
-				<button
-					type="button"
-					class="sidebar-tab-btn active"
-					id="reader-tab-btn"
-					onclick="switchSidebarTab('reader')">
-					Reader
-				</button>
-				<button
-					type="button"
-					class="sidebar-tab-btn"
-					id="translator-tab-btn"
-					onclick="switchSidebarTab('translator')">
-					Translator
-				</button>
-			</div>
-
-			<div class="tab-panel active" id="reader-tab-panel">
+			<div class="common-sidebar-controls" aria-label="Shared story controls">
 				<div class="control-group">
 					<label>Story File</label>
 					<label for="jsonFile" class="btn-common browse-label"
@@ -65,6 +48,32 @@
 					<span id="image-folder-status" class="small-status"></span>
 				</div>
 
+				<div class="control-group">
+					<label>Cache</label>
+					<button class="btn-common clear-cache-btn" id="clear-cache-btn">
+						Clear Cache
+					</button>
+				</div>
+			</div>
+
+			<div class="sidebar-tabs">
+				<button
+					type="button"
+					class="sidebar-tab-btn active"
+					id="reader-tab-btn"
+					onclick="switchSidebarTab('reader')">
+					Reader
+				</button>
+				<button
+					type="button"
+					class="sidebar-tab-btn"
+					id="translator-tab-btn"
+					onclick="switchSidebarTab('translator')">
+					Translator
+				</button>
+			</div>
+
+			<div class="tab-panel active" id="reader-tab-panel">
 				<div class="control-group">
 					<label>Loading Mode</label>
 					<div class="statusBox">
@@ -126,12 +135,6 @@
 						style="margin-top: 8px"
 						onclick="handlePrint()">
 						Print Story
-					</button>
-					<button
-						class="btn-common clear-cache-btn"
-						id="clear-cache-btn"
-						style="margin-top: 8px">
-						Clear Cache
 					</button>
 				</div>
 			</div>
