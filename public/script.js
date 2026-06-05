@@ -991,8 +991,6 @@ function updateStoryMeta(storyData) {
 
     const rows = [
         ["Last Fetch", formatMetaValue(storyData.lastFetch)],
-        ["Total Images", storyData["total-image"] || 0],
-        ["Image Downloads", storyData["image-downlaods"] || 0],
         ["Start", formatMetaValue(storyData["start-time"])],
         ["End", formatMetaValue(storyData["end time"])],
         ["Duration", formatMetaValue(storyData["duration taken"])],
