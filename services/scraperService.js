@@ -483,20 +483,29 @@ async function fetchRequiredPage(url, signal) {
 }
 
 async function fetchPage(url, signal) {
-    try {
-        const { data } = await axios.get(url, {
-            signal,
-            timeout: 30000
-        });
-        return cheerio.load(data);
-    } catch (err) {
-        if (err.code === "ERR_CANCELED" || err.name === "CanceledError") {
-            throw createScrapeError("FETCH_CANCELLED", "Fetch cancelled");
-        }
+  try {
+    const { data } = await axios.get(url, {
+      signal,
+      timeout: 30000,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:151.0) Gecko/20100101 Firefox/151.0",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9,hi;q=0.8",
+        "Referer": "https://xforum.live/",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1"
+      }
+    });
 
-        console.error(`Error fetching URL: ${url}\n`, err.message);
-        return null;
+    return cheerio.load(data);
+  } catch (err) {
+    if (err.code === "ERR_CANCELED" || err.name === "CanceledError") {
+      throw createScrapeError("FETCH_CANCELLED", "Fetch cancelled");
     }
+
+    console.error(`Error fetching URL: ${url}\n`, err.response?.status, err.message);
+    return null;
+  }
 }
 
 function getLastPage($, config) {

@@ -2,10 +2,7 @@ const express = require("express");
 
 const router = express.Router();
 
-const {
-	translateJson,
-	cancelTranslation,
-} = require("../controllers/translateController");
+const { translateJson, cancelTranslation } = require("../controllers/translateController");
 
 router.post("/translate-json", translateJson);
 router.post("/translate-json/:jobId/cancel", cancelTranslation);

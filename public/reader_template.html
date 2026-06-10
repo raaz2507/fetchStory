@@ -15,69 +15,31 @@
 			<div class="common-sidebar-controls" aria-label="Shared story controls">
 				<div class="control-group">
 					<label>Story File</label>
-					<label for="jsonFile" class="btn-common browse-label"
-						>Browse JSON</label
-					>
-					<input
-						type="file"
-						id="jsonFile"
-						accept=".json"
-						onchange="handleFileSelect(event)" />
-					<span
-						id="file-name-display"
-						style="
-							font-size: 0.8rem;
-							opacity: 0.7;
-							font-style: italic;
-							text-align: center;
-						"
-						>No file chosen</span
-					>
+					<label for="jsonFile" class="btn-common browse-label">Browse JSON</label>
+					<input type="file" id="jsonFile" accept=".json" onchange="handleFileSelect(event)" />
+					<span id="file-name-display" style="font-size: 0.8rem; opacity: 0.7; font-style: italic; text-align: center">No file chosen</span>
 				</div>
 
 				<div class="control-group">
-					<label>Image Folder Path</label>
-					<input
-						type="text"
-						id="imageFolderPath"
-						class="path-input"
-						placeholder="D:/stories/images" />
-					<button class="btn-common" id="setImageFolderBtn">
-						Set Image Path
-					</button>
+					<label for="imageFolderPicker" class="btn-common browse-label">Browse Image Folder</label>
+					<input type="file" id="imageFolderPicker" webkitdirectory directory multiple hidden />
 					<span id="image-folder-status" class="small-status"></span>
 				</div>
 
 				<div class="control-group">
 					<label>Cache</label>
-					<button class="btn-common clear-cache-btn" id="clear-cache-btn">
-						Clear Cache
-					</button>
+					<button class="btn-common clear-cache-btn" id="clear-cache-btn">Clear Cache</button>
 				</div>
 
 				<div class="control-group">
 					<label>Session</label>
-					<button class="btn-common logout-btn" id="logoutBtn" type="button">
-						Logout
-					</button>
+					<button class="btn-common logout-btn" id="logoutBtn" type="button">Logout</button>
 				</div>
 			</div>
 
 			<div class="sidebar-tabs">
-				<button
-					type="button"
-					class="sidebar-tab-btn active"
-					id="reader-tab-btn"
-					onclick="switchSidebarTab('reader')">
-					Reader
-				</button>
-				<button
-					type="button"
-					class="sidebar-tab-btn"
-					id="translator-tab-btn"
-					onclick="switchSidebarTab('translator')">
-					Translator
-				</button>
+				<button type="button" class="sidebar-tab-btn active" id="reader-tab-btn" onclick="switchSidebarTab('reader')">Reader</button>
+				<button type="button" class="sidebar-tab-btn" id="translator-tab-btn" onclick="switchSidebarTab('translator')">Translator</button>
 			</div>
 
 			<div class="tab-panel active" id="reader-tab-panel">
@@ -86,12 +48,7 @@
 					<div class="statusBox">
 						<p id="read-progress">Read: 0%</p>
 					</div>
-					<button
-						class="btn-common load-all-btn"
-						id="load-all-btn"
-						onclick="loadWholeStory()">
-						Load All Parts
-					</button>
+					<button class="btn-common load-all-btn" id="load-all-btn" onclick="loadWholeStory()">Load All Parts</button>
 				</div>
 
 				<div class="control-group">
@@ -104,10 +61,7 @@
 
 				<div class="control-group">
 					<label>Reading Theme</label>
-					<select
-						class="theme-select"
-						id="theme-select"
-						onchange="changeTheme(this.value)">
+					<select class="theme-select" id="theme-select" onchange="changeTheme(this.value)">
 						<option value="light">Light Theme</option>
 						<option value="dark">Dark Theme</option>
 						<option value="sepia">Sepia Theme</option>
@@ -119,42 +73,23 @@
 				<div class="control-group">
 					<label>Custom Bg Color</label>
 					<div class="color-picker-wrapper">
-						<input
-							type="color"
-							id="bg-color-picker"
-							class="color-input"
-							value="#f4f4f9"
-							oninput="setCustomBg(this.value)" />
+						<input type="color" id="bg-color-picker" class="color-input" value="#f4f4f9" oninput="setCustomBg(this.value)" />
 						<span style="font-size: 0.85rem">Choose Custom Color</span>
 					</div>
 				</div>
 
 				<div class="control-group">
 					<label>Actions</label>
-					<button
-						class="btn-common language-toggle-btn"
-						id="lang-toggle-btn"
-						onclick="toggleLanguage()">
-						Switch to Hindi
-					</button>
-					<button
-						class="btn-common print-btn"
-						style="margin-top: 8px"
-						onclick="handlePrint()">
-						Print Story
-					</button>
+					<button class="btn-common language-toggle-btn" id="lang-toggle-btn" onclick="toggleLanguage()">Switch to Hindi</button>
+					<button class="btn-common print-btn" style="margin-top: 8px" onclick="handlePrint()">Print Story</button>
 				</div>
 			</div>
 
 			<div class="tab-panel" id="translator-tab-panel">
 				<div class="control-group">
 					<label>Translate</label>
-					<button class="btn-common translate-btn" id="translateBtn">
-						Translate Story
-					</button>
-					<button class="btn-common stop-translate-btn hide" id="stopTranslateBtn">
-						Stop Translation
-					</button>
+					<button class="btn-common translate-btn" id="translateBtn">Translate Story</button>
+					<button class="btn-common stop-translate-btn hide" id="stopTranslateBtn">Stop Translation</button>
 					<div class="statusBox">
 						<p id="status">Waiting...</p>
 					</div>
@@ -173,19 +108,13 @@
 							<input type="text" name="con_per" placeholder="0" id="con_per" disabled />
 						</div>
 					</div>
-					<a id="downloadBtn" class="hide btn-common download-link" href="#">
-						Download Translated JSON
-					</a>
-					<a id="downloadNotFoundBtn" class="hide btn-common download-link" href="#">
-						Download Not Found Words
-					</a>
+					<a id="downloadBtn" class="hide btn-common download-link" href="#"> Download Translated JSON </a>
+					<a id="downloadNotFoundBtn" class="hide btn-common download-link" href="#"> Download Not Found Words </a>
 				</div>
 			</div>
 		</div>
 		<div class="reader-container">
-			<h1 class="story-title" id="story-main-title">
-				Select or Load a Story...
-			</h1>
+			<h1 class="story-title" id="story-main-title">Select or Load a Story...</h1>
 			<div id="content-area">Story Content</div>
 			<div id="reader-status" class="loading-status">Waiting for JSON data...</div>
 		</div>

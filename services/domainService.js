@@ -29,7 +29,7 @@ const domainConfigs = {
 			position: "last",
 		},
 		pagination: {
-			lastPageSelector: ".pagination a[href^=\"thread-\"]",
+			lastPageSelector: '.pagination a[href^="thread-"]',
 		},
 		writer: {
 			selector: "#posts .post:first .author_information .largetext a",
@@ -114,27 +114,11 @@ function recordUnsupportedDomain(inputUrl) {
 }
 
 function isUsableConfig(config) {
-	const hasStructuredSelectors = Boolean(
-		config.title &&
-		config.title.selector &&
-		config.pagination &&
-		config.pagination.lastPageSelector &&
-		config.writer &&
-		config.writer.selector &&
-		config.posts &&
-		config.posts.containerSelector &&
-		(config.posts.authorSelector || config.posts.authorAttribute) &&
-		config.posts.bodySelector
-	);
+	const hasStructuredSelectors = Boolean(config.title && config.title.selector && config.pagination && config.pagination.lastPageSelector && config.writer && config.writer.selector && config.posts && config.posts.containerSelector && (config.posts.authorSelector || config.posts.authorAttribute) && config.posts.bodySelector);
 
 	if (hasStructuredSelectors) return true;
 
-	return Boolean(
-		config.titleSelector &&
-		config.lastPageSelector &&
-		config.writerNameSelector &&
-		(config.postBodySelector || config.customPostExtractor)
-	);
+	return Boolean(config.titleSelector && config.lastPageSelector && config.writerNameSelector && (config.postBodySelector || config.customPostExtractor));
 }
 
 module.exports = {

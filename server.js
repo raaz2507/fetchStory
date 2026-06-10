@@ -14,21 +14,22 @@ const { requirePublicAuth, redirectToPublicLogin } = require("./controllers/admi
 patchConsole();
 
 process.on("uncaughtException", (err) => {
-    logCrash("uncaughtException", err);
+	logCrash("uncaughtException", err);
 });
 
 process.on("unhandledRejection", (reason) => {
-    logCrash("unhandledRejection", reason);
+	logCrash("unhandledRejection", reason);
 });
 
 const app = express();
 
-app.use(cors({
-    origin: true,
-    credentials: true,
-}));
+app.use(
+	cors({
+		origin: true,
+		credentials: true,
+	}),
+);
 app.use(express.json({ limit: "50mb" }));
-
 
 app.locals.baseUrl = "http://localhost:3000";
 // app.use((req, res, next) => {
@@ -43,40 +44,39 @@ app.use("/api/auth", authRoutes);
 app.use("/images", express.static(path.join(__dirname, "temp", "images")));
 
 app.get("/", (req, res) => {
-    res.redirect("/home");
+	res.redirect("/home");
 });
 app.get("/index.html", (req, res) => {
-    res.redirect("/home");
+	res.redirect("/home");
 });
 app.get("/reader_template.html", (req, res) => {
-    res.redirect("/reader-translator");
+	res.redirect("/reader-translator");
 });
 app.get("/home", redirectToPublicLogin, (req, res) => {
-    res.sendFile(path.join(__dirname, "public", "index.html"));
+	res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 app.get("/reader-translator", redirectToPublicLogin, (req, res) => {
-    res.sendFile(path.join(__dirname, "public", "reader_template.html"));
+	res.sendFile(path.join(__dirname, "public", "reader_template.html"));
 });
 app.use(express.static("public"));
 
 app.use((req, res, next) => {
-    const startedAt = Date.now();
+	const startedAt = Date.now();
 
-    console.log("Cookie:", req.headers.cookie);
-    console.log("Session:", req.session);
-    
-    res.on("finish", () => {
-        const durationMs = Date.now() - startedAt;
-        console.info(`${req.method} ${req.originalUrl} ${res.statusCode} ${durationMs}ms`);
-        if (durationMs > 30000) {
-            logMemory(`${req.method} ${req.originalUrl} finished after ${durationMs}ms`);
-        }
-    });
-    next();
+	console.log("Cookie:", req.headers.cookie);
+	console.log("Session:", req.session);
+
+	res.on("finish", () => {
+		const durationMs = Date.now() - startedAt;
+		console.info(`${req.method} ${req.originalUrl} ${res.statusCode} ${durationMs}ms`);
+		if (durationMs > 30000) {
+			logMemory(`${req.method} ${req.originalUrl} finished after ${durationMs}ms`);
+		}
+	});
+	next();
 });
 
 // ==========================
-
 
 // console.log("adminRoutes:", typeof adminRoutes);
 // console.log("storyRoutes:", typeof storyRoutes);
@@ -85,11 +85,6 @@ app.use((req, res, next) => {
 // console.log("translatorRoutes:", typeof translatorRoutes);
 // console.log("translatorProgressRoutes:", typeof translatorProgressRoutes);
 // console.log("requirePublicAuth:", typeof requirePublicAuth);
-
-
-
-
-
 
 //==============================
 
@@ -101,12 +96,12 @@ app.use("/api/translator", requirePublicAuth, translatorRoutes);
 app.use("/api/translator", requirePublicAuth, translatorProgressRoutes);
 
 app.use("/temp", express.static(path.join(__dirname, "temp")));
-app.use('/temp/images', express.static(path.join(__dirname, 'temp', 'images')));
+app.use("/temp/images", express.static(path.join(__dirname, "temp", "images")));
 app.use("/downloads", express.static(path.join(__dirname, "downloads")));
 app.use("/translator/outputs", express.static(path.join(__dirname, "translator", "outputs")));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-    logMemory("server started");
+	console.log(`Server running on http://localhost:${PORT}`);
+	logMemory("server started");
 });
