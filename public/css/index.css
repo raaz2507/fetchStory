@@ -69,6 +69,7 @@ button:disabled {
 
 #processUploadedImagesBtn,
 #downloadBtn,
+#downloadFstoryBtn,
 #loadFromCache {
     --btn-bg: var(--success);
     --btn-hover: var(--success-strong);
@@ -83,6 +84,7 @@ button:disabled {
 
 #cancelFetchBtn,
 #clearCache,
+#clearFstoryBtn,
 #logoutBtn {
     --btn-bg: var(--danger);
     --btn-hover: var(--danger-strong);

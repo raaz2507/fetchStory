@@ -25,6 +25,7 @@
 					<label for="fstoryFile" class="btn-common browse-label">Open .fstory</label>
 					<input type="file" id="fstoryFile" accept=".fstory,application/zip" hidden />
 					<button class="btn-common download-link" id="downloadFstoryBtn" type="button">Download Updated .fstory</button>
+					<button class="btn-common clear-cache-btn" id="clearFstoryBtn" type="button">Clear Package</button>
 					<span id="fstory-status" class="small-status"></span>
 				</div>
 
@@ -36,7 +37,8 @@
 
 				<div class="control-group section-cache">
 					<label>Cache</label>
-					<button class="btn-common clear-cache-btn" id="clear-cache-btn">Clear Cache</button>
+					<button class="btn-common clear-cache-btn" id="clear-cache-btn">Clear Story Cache</button>
+					<button class="btn-common clear-cache-btn" id="clear-reading-progress-btn">Clear Reading Progress</button>
 				</div>
 
 				<div class="control-group section-session">
@@ -127,7 +129,7 @@
 			<div id="reader-status" class="loading-status">Waiting for JSON data...</div>
 		</div>
 		<script src="/vendor/jszip/jszip.min.js"></script>
-		<script src="./js/fstory.js"></script>
-		<script src="./js/reader.js"></script>
+		<script src="./js/fstory.js?v=2"></script>
+		<script src="./js/reader.js?v=2"></script>
 	</body>
 </html>

@@ -16,56 +16,64 @@ exports.downloadStory = async (req, res) => {
 	try {
 		const { title = "story" } = req.body;
 		const jobId = getValidJobId(req.body && req.body.jobId);
-
 		const names = createStoryFileNames(title);
-
 		const tempFolder = getJobFolder(jobId);
-		const sourceJsonPath = path.join(tempFolder, "story_data.json");
+		let sourceJsonPath = path.join(tempFolder, "story_data.json");
 
 		if (!fs.existsSync(sourceJsonPath)) {
-			return res.status(404).send("No story data found to download. Please fetch first.");
+			const legacyJsonName = fs.existsSync(tempFolder)
+				? fs.readdirSync(tempFolder, { withFileTypes: true })
+					.find((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".json"))
+				: null;
+			if (legacyJsonName) {
+				sourceJsonPath = path.join(tempFolder, legacyJsonName.name);
+			} else {
+				return res.status(404).send("No story data found to download. Please fetch first.");
+			}
 		}
 
-		// JSON सुंदर format में save करो
 		const storyData = JSON.parse(fs.readFileSync(sourceJsonPath, "utf8"));
-
 		const imageFolderName = names.imageFolder;
-		const oldImagePath = path.join(tempFolder, "images");
-		const newImagePath = path.join(tempFolder, imageFolderName);
+		let sourceImagesPath = path.join(tempFolder, "images");
+		if (!fs.existsSync(sourceImagesPath) && fs.existsSync(tempFolder)) {
+			const legacyImagesFolder = fs.readdirSync(tempFolder, { withFileTypes: true })
+				.find((entry) => entry.isDirectory() && entry.name.toLowerCase().endsWith("_images"));
+			if (legacyImagesFolder) {
+				sourceImagesPath = path.join(tempFolder, legacyImagesFolder.name);
+			}
+		}
+		const exportsFolder = path.join(tempFolder, "exports");
+		const packageFolder = path.join(exportsFolder, names.baseName);
+		const packageImagesPath = path.join(packageFolder, imageFolderName);
+		const finalJsonPath = path.join(packageFolder, names.jsonFile);
+		const zipPath = path.join(exportsFolder, names.zipFile);
 
-		// images folder को rename करो, copy नहीं
-		if (fs.existsSync(oldImagePath) && !fs.existsSync(newImagePath)) {
-			fs.renameSync(oldImagePath, newImagePath);
+		// Package a copy and keep the fetched source intact for retries,
+		// append operations, and alternative .fstory downloads.
+		fs.mkdirSync(packageFolder, { recursive: true });
+		if (fs.existsSync(packageImagesPath)) {
+			fs.rmSync(packageImagesPath, { recursive: true, force: true });
+		}
+		if (fs.existsSync(sourceImagesPath)) {
+			fs.cpSync(sourceImagesPath, packageImagesPath, { recursive: true });
 		}
 
-		// JSON में image paths update करो
-		const jsonText = rewriteImagePathsForDownload( JSON.stringify(storyData, null, 2), jobId, names.imageFolder);
-
-		const finalJsonName = names.jsonFile;
-		const finalJsonPath = path.join(tempFolder, finalJsonName);
-
+		const jsonText = rewriteImagePathsForDownload(
+			JSON.stringify(storyData, null, 2),
+			jobId,
+			imageFolderName,
+		);
 		fs.writeFileSync(finalJsonPath, jsonText, "utf8");
 
-		// पुरानी story_data.json zip में नहीं चाहिए
-		fs.rmSync(sourceJsonPath, { force: true });
-
-		const zipPath = path.join(__dirname, "..", "temp", names.zipFile);
-
-		await createZip(tempFolder, zipPath);
+		await createZip(packageFolder, zipPath);
 
 		if (!fs.existsSync(zipPath) || fs.statSync(zipPath).size === 0) {
 			throw new Error("Zip creation failed or file is 0 bytes.");
 		}
 
-		res.download(zipPath, `${names}.zip`, (err) => {
+		res.download(zipPath, names.zipFile, (err) => {
 			if (err) {
 				console.error("Error during file transfer:", err);
-			}
-
-			try {
-				if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
-			} catch (cleanErr) {
-				console.error("Cleanup warning:", cleanErr.message);
 			}
 		});
 	} catch (err) {
@@ -75,6 +83,43 @@ exports.downloadStory = async (req, res) => {
 		}
 	}
 };
+
+exports.downloadFetchStory = async (req, res) => {
+	try {
+		const { title = "story" } = req.body;
+		const jobId = getValidJobId(req.body && req.body.jobId);
+		const result = await createFetchStoryPackage(jobId, title);
+
+		res.download(result.packagePath, result.fileName, (err) => {
+			if (err) {
+				console.error("FetchStory transfer error:", err);
+			}
+		});
+	} catch (err) {
+		console.error("FetchStory download error:", err);
+		if (!res.headersSent) {
+			res.status(err.statusCode || 500).send("FetchStory download failed: " + err.message);
+		}
+	}
+};
+
+exports.getJobStory = (req, res) => {
+	try {
+		const jobId = getValidJobId(req.params && req.params.jobId);
+		const jsonFilePath = path.join(getJobFolder(jobId), "story_data.json");
+		if (!fs.existsSync(jsonFilePath)) {
+			return res.status(404).json({ error: "Story data not found" });
+		}
+		return res.json({
+			ok: true,
+			jobId,
+			storyData: normalizeStoryData(JSON.parse(fs.readFileSync(jsonFilePath, "utf8"))),
+		});
+	} catch (err) {
+		return res.status(err.statusCode || 500).json({ error: err.message });
+	}
+};
+
 function rewriteImagePathsForDownload(jsonText, jobId, imageFolderName) {
 	return jsonText
 		.replace(
@@ -95,6 +140,116 @@ function createStoryFileNames(title) {
 		imageFolder: `${sanitizeFolderName(baseName, "images")}_images`,
 		zipFile: `${sanitizeFolderName(baseName, "zip")}.zip`,
 	};
+}
+
+async function createFetchStoryPackage(jobId, title) {
+	const tempFolder = getJobFolder(jobId);
+	const sourceJsonPath = path.join(tempFolder, "story_data.json");
+	if (!fs.existsSync(sourceJsonPath)) {
+		const err = new Error("No story data found to download. Please fetch first.");
+		err.statusCode = 404;
+		throw err;
+	}
+
+	const storyData = normalizeStoryData(JSON.parse(fs.readFileSync(sourceJsonPath, "utf8")));
+	const storyTitle = storyData.meta.storyName || title || "story";
+	const names = createStoryFileNames(storyTitle);
+	const exportsFolder = path.join(tempFolder, "exports");
+	const packageFolder = path.join(exportsFolder, `${names.baseName}_fstory`);
+	const packageImagesPath = path.join(packageFolder, "images");
+	const manifestPath = path.join(packageFolder, "manifest.json");
+	const contentFile = `${sanitizeFolderName(names.baseName, "json")}.json`;
+	const contentPath = path.join(packageFolder, contentFile);
+	const packagePath = path.join(exportsFolder, `${names.baseName}.fstory`);
+	const previousManifest = readJsonIfExists(manifestPath);
+	const now = new Date().toISOString();
+
+	fs.mkdirSync(packageFolder, { recursive: true });
+	if (fs.existsSync(packageImagesPath)) {
+		fs.rmSync(packageImagesPath, { recursive: true, force: true });
+	}
+	const sourceImagesPath = path.join(tempFolder, "images");
+	if (fs.existsSync(sourceImagesPath)) {
+		fs.cpSync(sourceImagesPath, packageImagesPath, { recursive: true });
+	}
+
+	const packagedStory = normalizeStoryData(JSON.parse(JSON.stringify(storyData)));
+	rewriteStoryImagePaths(packagedStory, jobId, "images");
+	const storyText = JSON.stringify(packagedStory, null, 2);
+	const engCount = Object.keys(packagedStory.posts.eng || {}).length;
+	const hinCount = Object.keys(packagedStory.posts.hin || {}).length;
+	const manifest = {
+		format: "fetchstory",
+		formatVersion: 1,
+		storyId: previousManifest && previousManifest.storyId
+			? previousManifest.storyId
+			: crypto.randomUUID(),
+		title: packagedStory.meta.storyName || storyTitle,
+		author: packagedStory.meta.writerName || "",
+		sourceUrl: packagedStory.meta.url || "",
+		sourceDomain: packagedStory.meta.domain || "",
+		contentFile,
+		imagesFolder: "images/",
+		languages: hinCount ? ["eng", "hin"] : ["eng"],
+		defaultLanguage: previousManifest && previousManifest.defaultLanguage
+			? previousManifest.defaultLanguage
+			: "eng",
+		translation: {
+			status: hinCount === 0 ? "none" : hinCount >= engCount ? "complete" : "partial",
+			translatedPosts: hinCount,
+			engineVersion: String(
+				packagedStory.translation.dictionaryVersion
+				|| (previousManifest && previousManifest.translation && previousManifest.translation.engineVersion)
+				|| "1",
+			),
+			updatedAt: hinCount ? now : null,
+		},
+		createdAt: previousManifest && previousManifest.createdAt
+			? previousManifest.createdAt
+			: now,
+		updatedAt: now,
+		integrity: {
+			storyChecksum: crypto.createHash("sha256").update(storyText).digest("hex"),
+		},
+	};
+
+	fs.writeFileSync(contentPath, storyText, "utf8");
+	fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
+	await createZip(packageFolder, packagePath);
+
+	if (!fs.existsSync(packagePath) || fs.statSync(packagePath).size === 0) {
+		throw new Error("FetchStory package creation failed or file is empty.");
+	}
+
+	return {
+		packagePath,
+		fileName: `${names.baseName}.fstory`,
+		manifest,
+	};
+}
+
+function rewriteStoryImagePaths(storyData, jobId, imagesFolder) {
+	for (const section of ["eng", "hin"]) {
+		const posts = storyData.posts[section] || {};
+		for (const key of Object.keys(posts)) {
+			posts[key] = rewriteImagePathsForDownload(
+				String(posts[key] || ""),
+				jobId,
+				imagesFolder,
+			);
+		}
+	}
+}
+
+function readJsonIfExists(filePath) {
+	try {
+		return fs.existsSync(filePath)
+			? JSON.parse(fs.readFileSync(filePath, "utf8"))
+			: null;
+	} catch (err) {
+		console.warn("Existing package manifest ignored:", err.message);
+		return null;
+	}
 }
 
 exports.storyMeta = async (req, res) => {
@@ -289,7 +444,10 @@ exports.streamStory = async (req, res) => {
 
 	try {
 		const existingStoryData = appendMode ? readExistingStoryData(jsonFilePath) : null;
-		const effectiveAppendMode = appendMode && existingStoryData && isSameStorySource(existingStoryData.url, url);
+		const existingUrl = existingStoryData && existingStoryData.meta
+			? existingStoryData.meta.url
+			: existingStoryData && existingStoryData.url;
+		const effectiveAppendMode = appendMode && existingStoryData && isSameStorySource(existingUrl, url);
 		const resumePage = effectiveAppendMode ? Number(existingStoryData.fetch.lastPageNo || 0) : 0;
 		const startPage = effectiveAppendMode && resumePage > 0 ? resumePage : requestedStartPage;
 
@@ -371,7 +529,10 @@ exports.streamStory = async (req, res) => {
 							let currentPostNum = postNumberMap.get(localPostNum);
 
 							if (!currentPostNum) {
-								currentPostNum = nextPostNumber++;
+								currentPostNum = effectiveAppendMode
+									? findPostNumberByHtml(currentJson.posts.eng, contentHtml)
+									: null;
+								if (!currentPostNum) currentPostNum = nextPostNumber++;
 								postNumberMap.set(localPostNum, currentPostNum);
 							}
 

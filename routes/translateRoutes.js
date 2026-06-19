@@ -2,7 +2,7 @@ const crypto = require("crypto");
 const express = require("express");
 
 const processTranslation = require("../services/translationService");
-const progressStore = require("../translator/jobs/progressStore");
+const progressStore = require("../src/translator/progressStore");
 
 const router = express.Router();
 

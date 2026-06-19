@@ -26,6 +26,7 @@ const imageFolderPathInput = document.getElementById("imageFolderPath");
 const setImageFolderBtn = document.getElementById("setImageFolderBtn");
 const imageFolderStatus = document.getElementById("image-folder-status");
 const clearCacheBtn = document.getElementById("clear-cache-btn");
+const clearReadingProgressBtn = document.getElementById("clear-reading-progress-btn");
 const readProgress = document.getElementById("read-progress");
 const readerTabBtn = document.getElementById("reader-tab-btn");
 const translatorTabBtn = document.getElementById("translator-tab-btn");
@@ -37,6 +38,7 @@ const conversionPercentInput = document.getElementById("con_per");
 const logoutBtn = document.getElementById("logoutBtn");
 const fstoryFileInput = document.getElementById("fstoryFile");
 const downloadFstoryBtn = document.getElementById("downloadFstoryBtn");
+const clearFstoryBtn = document.getElementById("clearFstoryBtn");
 const fstoryStatus = document.getElementById("fstory-status");
 let useLocalImageFolder = false;
 let activeTranslationJobId = null;
@@ -167,6 +169,10 @@ if (contentArea) {
 		clearCacheBtn.addEventListener("click", clearReaderCache);
 	}
 
+	if (clearReadingProgressBtn) {
+		clearReadingProgressBtn.addEventListener("click", clearReadingProgress);
+	}
+
 	if (logoutBtn) {
 		logoutBtn.addEventListener("click", logoutPublicSession);
 	}
@@ -214,6 +220,10 @@ if (contentArea) {
 				downloadFstoryBtn.disabled = false;
 			}
 		});
+	}
+
+	if (clearFstoryBtn) {
+		clearFstoryBtn.addEventListener("click", clearLoadedPackage);
 	}
 
 	const savedImageFolderPath = localStorage.getItem("readerImageFolderPath") || "";
@@ -524,7 +534,7 @@ if (contentArea) {
 	}
 
 	async function clearReaderCache() {
-		const confirmed = window.confirm("Clear cached story and saved reading positions?");
+		const confirmed = window.confirm("Clear the cached story?");
 		if (!confirmed) return;
 
 		if (clearCacheBtn) clearCacheBtn.disabled = true;
@@ -545,13 +555,6 @@ if (contentArea) {
 				};
 			});
 
-			for (let i = localStorage.length - 1; i >= 0; i--) {
-				const key = localStorage.key(i);
-				if (key && key.startsWith("readerScroll:")) {
-					localStorage.removeItem(key);
-				}
-			}
-
 			fileNameDisplay.textContent = storyData ? "Cache cleared" : "No file chosen";
 			statusDiv.textContent = "Cache cleared. Reload will not auto-load this story.";
 			updateReadProgress();
@@ -561,6 +564,36 @@ if (contentArea) {
 		} finally {
 			if (clearCacheBtn) clearCacheBtn.disabled = false;
 		}
+	}
+
+	function clearReadingProgress() {
+		for (let i = localStorage.length - 1; i >= 0; i--) {
+			const key = localStorage.key(i);
+			if (key && key.startsWith("readerScroll:")) {
+				localStorage.removeItem(key);
+			}
+		}
+		window.scrollTo({ top: 0, behavior: "smooth" });
+		statusDiv.textContent = "Saved reading progress cleared.";
+		updateReadProgress();
+	}
+
+	function clearLoadedPackage() {
+		if (!currentFstoryContext) {
+			if (fstoryStatus) fstoryStatus.textContent = "No package loaded";
+			return;
+		}
+		FetchStoryPackage.dispose(currentFstoryContext);
+		currentFstoryContext = null;
+		storyData = null;
+		pageKeys = [];
+		keyIndex = 0;
+		contentArea.innerHTML = "Story Content";
+		titleElement.textContent = "Select or Load a Story...";
+		fileNameDisplay.textContent = "No file chosen";
+		statusDiv.textContent = "Local package JSON and image memory cleared.";
+		if (fstoryStatus) fstoryStatus.textContent = "Package cleared";
+		updateReadProgress();
 	}
 
 	async function logoutPublicSession() {
@@ -623,7 +656,7 @@ if (contentArea) {
 			pageKeys = Object.keys(storyData.posts.eng).sort((a, b) => Number(a) - Number(b));
 		}
 
-		if (options.saveToCache !== false) {
+		if (options.saveToCache !== false && !currentFstoryContext) {
 			saveReaderStoryCache(storyData).catch((err) => {
 				console.warn("Reader cache save failed:", err.message);
 			});
@@ -863,6 +896,7 @@ if (contentArea) {
 
 	window.addEventListener("beforeunload", () => {
 		saveReaderScroll(true);
+		FetchStoryPackage.dispose(currentFstoryContext);
 	});
 
 	// बाहर कहीं क्लिक करने पर साइडबार अपने आप बंद हो जाए

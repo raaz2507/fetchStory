@@ -1,6 +1,10 @@
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const {
+    adminStoreRepository,
+    authService,
+} = require("../src/core/appServices");
 
 const {
     isFileLoggingEnabled,
@@ -13,29 +17,9 @@ const rootFolder = path.join(__dirname, "..");
 const tempJobsFolder = path.join(rootFolder, "temp", "jobs");
 const outputsFolder = path.join(rootFolder, "translator", "outputs");
 const logsFolder = path.join(rootFolder, "logs");
-const dataFolder = process.env.FETCHSTORY_DATA_DIR
-    ? path.resolve(process.env.FETCHSTORY_DATA_DIR)
-    : path.join(rootFolder, "data");
-const storePath = path.join(dataFolder, "admin-store.json");
-const sessions = new Map();
-const publicSessions = new Map();
-const publicSessionDurationMs = 1000 * 60 * 60 * 24 * 7;
-let cachedStore = null;
-let storeLoadPromise = null;
-let storeWriteQueue = Promise.resolve();
-
-const defaultStore = {
-    settings: {
-        fileLoggingEnabled: true,
-    },
-    users: [],
-    publicSessions: [],
-    activity: [],
-    moderation: [],
-};
 
 exports.requireAdminAuth = (req, res, next) => {
-    const session = getSessionFromRequest(req);
+    const session = getSessionFromRequest(req, "admin_session", "admin");
 
     if (!session) {
         return res.status(401).json({ error: "Admin login required" });
@@ -122,30 +106,18 @@ exports.publicLogin = async (req, res) => {
         if (user.blocked) return res.status(403).json({ error: "Your account is blocked" });
         if (user.approved === false) return res.status(403).json({ error: "Admin approval pending" });
 
-        const token = crypto.randomBytes(32).toString("hex");
         const sessionUser = sanitizeUser(user);
-        const expiresAt = Date.now() + publicSessionDurationMs;
-        publicSessions.set(token, {
-            user: sessionUser,
-            expiresAt,
-        });
-        store.publicSessions = getActivePublicSessionRecords(store)
-            .filter((session) => session.userId !== user.id && session.token !== token);
-        store.publicSessions.push({
-            token,
-            userId: user.id,
-            createdAt: new Date().toISOString(),
-            expiresAt,
-        });
         user.lastLoginAt = new Date().toISOString();
         await saveStore(store);
+        const session = authService.createSession(user.id, "public");
         await addActivity("public_login_success", user.username, "Public app login");
 
-        res.cookie("public_session", token, {
+        res.cookie("public_session", session.token, {
             httpOnly: true,
             path: "/",
             sameSite: "strict",
-            maxAge: publicSessionDurationMs,
+            secure: process.env.NODE_ENV === "production",
+            maxAge: session.duration,
         });
         res.json({ ok: true, user: sessionUser });
     } catch (err) {
@@ -156,11 +128,7 @@ exports.publicLogin = async (req, res) => {
 exports.publicLogout = async (req, res) => {
     const token = getCookie(req, "public_session");
     if (token) {
-        publicSessions.delete(token);
-        const store = await getStore();
-        store.publicSessions = getActivePublicSessionRecords(store)
-            .filter((session) => session.token !== token);
-        await saveStore(store);
+        authService.deleteSession(token);
     }
     res.clearCookie("public_session", { path: "/" });
     res.json({ ok: true });
@@ -189,21 +157,18 @@ exports.login = async (req, res) => {
             return res.status(403).json({ error: "Admin access not allowed for this role" });
         }
 
-        const token = crypto.randomBytes(32).toString("hex");
         const sessionUser = sanitizeUser(user);
-        sessions.set(token, {
-            user: sessionUser,
-            expiresAt: Date.now() + 1000 * 60 * 60 * 12,
-        });
         user.lastLoginAt = new Date().toISOString();
         await saveStore(store);
+        const session = authService.createSession(user.id, "admin");
         await addActivity("login_success", user.username, "Admin panel login");
 
-        res.cookie("admin_session", token, {
+        res.cookie("admin_session", session.token, {
             httpOnly: true,
             path: "/",
             sameSite: "strict",
-            maxAge: 1000 * 60 * 60 * 12,
+            secure: process.env.NODE_ENV === "production",
+            maxAge: session.duration,
         });
         res.json({ ok: true, user: sessionUser });
     } catch (err) {
@@ -214,7 +179,7 @@ exports.login = async (req, res) => {
 
 exports.logout = async (req, res) => {
     const token = getCookie(req, "admin_session");
-    if (token) sessions.delete(token);
+    if (token) authService.deleteSession(token);
     res.clearCookie("admin_session", { path: "/" });
     if (req.adminUser) {
         await addActivity("logout", req.adminUser.username, "Admin panel logout");
@@ -430,7 +395,7 @@ exports.restoreStore = async (req, res) => {
         }
 
         const store = normalizeStore(incoming);
-        await saveStore(store);
+        adminStoreRepository.restoreStore(store);
         setFileLoggingEnabled(store.settings.fileLoggingEnabled !== false);
         await addActivity("settings_restored", req.adminUser.username, "Admin JSON restored");
         res.json({ ok: true });
@@ -455,21 +420,24 @@ async function listScrapedStories() {
 
         const stat = await fs.promises.stat(storyPath);
         const engPosts = story.posts && story.posts.eng ? story.posts.eng : {};
+        const meta = story.meta || {};
+        const fetchInfo = story.fetch || {};
+        const stats = story.stats || {};
 
         stories.push({
             jobId,
-            storyName: story.storyName || story.title || "Untitled Story",
-            writerName: story["writer-name"] || story.writerName || story.author || "",
-            url: story.url || "",
+            storyName: meta.storyName || story.storyName || story.title || "Untitled Story",
+            writerName: meta.writerName || story.writerName || story.author || "",
+            url: meta.url || story.url || "",
             posts: Object.keys(engPosts).length,
-            totalPage: Number(story.totalPage || 0),
-            lastPageNo: Number(story["last-page-no"] || 0),
-            images: Number(story["total-image"] || 0),
-            downloadedImages: Number(story["image-downlaods"] || 0),
-            startedAt: story["start-time"] || "",
-            completedAt: story["end time"] || "",
-            duration: story["duration taken"] || "",
-            lastFetch: story.lastFetch || stat.mtime.toISOString(),
+            totalPage: Number(fetchInfo.totalPage || story.totalPage || 0),
+            lastPageNo: Number(fetchInfo.lastPageNo || 0),
+            images: Number(stats.totalImages || 0),
+            downloadedImages: Number(stats.imageDownloads || 0),
+            startedAt: fetchInfo.startTime || "",
+            completedAt: fetchInfo.endTime || "",
+            duration: fetchInfo.durationText || "",
+            lastFetch: fetchInfo.lastFetch || stat.mtime.toISOString(),
             updatedAt: stat.mtime.toISOString(),
         });
     }
@@ -578,70 +546,13 @@ function getTimeValue(value) {
 }
 
 async function getStore() {
-    if (cachedStore) return cachedStore;
-    if (storeLoadPromise) return storeLoadPromise;
-
-    storeLoadPromise = (async () => {
-        await fs.promises.mkdir(dataFolder, { recursive: true });
-        let store = null;
-        let shouldSave = false;
-
-        try {
-            if (fs.existsSync(storePath)) {
-                store = JSON.parse(await fs.promises.readFile(storePath, "utf8"));
-            } else {
-                shouldSave = true;
-            }
-        } catch (err) {
-            console.warn("Admin store read failed, recreating:", err.message);
-            shouldSave = true;
-        }
-
-        store = normalizeStore(store || defaultStore);
-        if (!store.users.length) {
-            store.users.push({
-                id: crypto.randomUUID(),
-                username: "admin",
-                role: "admin",
-                blocked: false,
-                approved: true,
-                passwordHash: hashPassword("admin123"),
-                createdAt: new Date().toISOString(),
-                lastLoginAt: "",
-            });
-            shouldSave = true;
-        }
-
-        cachedStore = store;
-        if (shouldSave) await saveStore(store);
-        return cachedStore;
-    })();
-
-    try {
-        return await storeLoadPromise;
-    } finally {
-        storeLoadPromise = null;
-    }
+    return adminStoreRepository.loadStore();
 }
 
 async function saveStore(store) {
     const normalizedStore = normalizeStore(store);
     Object.assign(store, normalizedStore);
-    cachedStore = store;
-    const contents = JSON.stringify(normalizedStore, null, 2);
-
-    storeWriteQueue = storeWriteQueue
-        .catch((err) => {
-            console.error("Previous admin store write failed:", err.message);
-        })
-        .then(async () => {
-            await fs.promises.mkdir(dataFolder, { recursive: true });
-            const tempPath = `${storePath}.${crypto.randomUUID()}.tmp`;
-            await fs.promises.writeFile(tempPath, contents);
-            await fs.promises.rename(tempPath, storePath);
-        });
-
-    return storeWriteQueue;
+    return adminStoreRepository.saveStore(normalizedStore);
 }
 
 function normalizeStore(store) {
@@ -652,7 +563,7 @@ function normalizeStore(store) {
 
     return {
         settings: {
-            ...defaultStore.settings,
+            fileLoggingEnabled: true,
             ...(store.settings || {}),
         },
         users,
@@ -683,86 +594,42 @@ async function addActivity(type, actor, detail) {
 }
 
 function sanitizeUser(user) {
-    return {
-        id: user.id,
-        username: user.username,
-        role: user.role,
-        blocked: Boolean(user.blocked),
-        approved: user.approved !== false,
-        createdAt: user.createdAt || "",
-        updatedAt: user.updatedAt || "",
-        lastLoginAt: user.lastLoginAt || "",
-    };
+    return authService.sanitizeUser(user);
 }
 
 function normalizeUsername(value) {
-    return String(value || "").trim().replace(/\s+/g, "_").slice(0, 40);
+    return authService.normalizeUsername(value);
 }
 
 function normalizeRole(value) {
-    return ["admin", "editor", "user"].includes(value) ? value : "user";
+    return authService.normalizeRole(value);
 }
 
 function hashPassword(password) {
-    const salt = crypto.randomBytes(16).toString("hex");
-    const hash = crypto.pbkdf2Sync(password, salt, 100000, 32, "sha256").toString("hex");
-    return `pbkdf2_sha256$${salt}$${hash}`;
+    return authService.hashPassword(password);
 }
 
 function verifyPassword(password, passwordHash) {
-    const parts = String(passwordHash || "").split("$");
-    if (parts.length !== 3 || parts[0] !== "pbkdf2_sha256") return false;
-
-    const [, salt, storedHash] = parts;
-    const hash = crypto.pbkdf2Sync(password, salt, 100000, 32, "sha256").toString("hex");
-    if (hash.length !== storedHash.length) return false;
-    return crypto.timingSafeEqual(Buffer.from(hash, "hex"), Buffer.from(storedHash, "hex"));
+    return authService.verifyPassword(password, passwordHash);
 }
 
-function getSessionFromRequest(req, cookieName = "admin_session", sessionStore = sessions) {
+function getSessionFromRequest(req, cookieName, sessionType) {
     const token = getCookie(req, cookieName);
-    if (!token) return null;
-
-    const session = sessionStore.get(token);
-    if (!session || session.expiresAt <= Date.now()) {
-        sessionStore.delete(token);
-        return null;
-    }
-
-    session.expiresAt = Date.now() + 1000 * 60 * 60 * 12;
-    return session;
+    return authService.getSession(token, sessionType);
 }
 
 async function getPublicSessionFromRequest(req) {
     const token = getCookie(req, "public_session");
-    if (!token) return null;
+    const session = authService.getSession(token, "public");
+    if (!session) return null;
 
-    const cachedSession = publicSessions.get(token);
-    if (cachedSession && cachedSession.expiresAt > Date.now()) {
-        return cachedSession;
-    }
-    publicSessions.delete(token);
-
-    const store = await getStore();
-    const publicSession = getActivePublicSessionRecords(store)
-        .find((session) => session.token === token);
-    if (!publicSession) return null;
-
-    const user = store.users.find((item) => item.id === publicSession.userId);
+    const user = session.user;
     if (!user || user.blocked || user.approved === false) return null;
 
-    const session = {
+    return {
         user: sanitizeUser(user),
-        expiresAt: publicSession.expiresAt,
+        expiresAt: session.expiresAt,
     };
-    publicSessions.set(token, session);
-    return session;
-}
-
-function getActivePublicSessionRecords(store) {
-    return Array.isArray(store.publicSessions)
-        ? store.publicSessions.filter((session) => Number(session.expiresAt) > Date.now())
-        : [];
 }
 
 function getPublicLoginUrl(req) {

@@ -39,6 +39,7 @@ const jsonUploadInput = document.getElementById("jsonUploadInput");
 const insertFstoryBtn = document.getElementById("insertFstoryBtn");
 const fstoryUploadInput = document.getElementById("fstoryUploadInput");
 const downloadFstoryBtn = document.getElementById("downloadFstoryBtn");
+const clearFstoryBtn = document.getElementById("clearFstoryBtn");
 const cleanUploadedJsonBtn = document.getElementById("cleanUploadedJsonBtn");
 const processUploadedImagesBtn = document.getElementById("processUploadedImagesBtn");
 const logoutBtn = document.getElementById("logoutBtn");
@@ -272,11 +273,20 @@ if (downloadFstoryBtn) {
         try {
             downloadFstoryBtn.disabled = true;
             setJobStatus("Packaging", "active");
-            setStatus("Building .fstory", "Collecting story JSON and images locally...");
-            const result = await FetchStoryPackage.build(currentStoryData, currentFstoryContext);
-            FetchStoryPackage.download(result.blob, result.fileName);
+            if (currentFstoryContext) {
+                setStatus("Building .fstory", "Merging original package images with newly fetched images locally...");
+                const result = await FetchStoryPackage.build(currentStoryData, currentFstoryContext);
+                FetchStoryPackage.download(result.blob, result.fileName);
+            } else {
+                if (!currentStoryJobId) throw new Error("Server story job is not available");
+                setStatus("Building .fstory", "Server is packaging fetched JSON and images...");
+                await downloadServerFile(
+                    "/api/story/download-fstory",
+                    `${sanitizeFileName(storyTitle.textContent.trim() || "story")}.fstory`,
+                );
+            }
             setJobStatus("Ready", "complete");
-            setStatus(".fstory ready", `${result.fileName} downloaded.`);
+            setStatus(".fstory ready", "FetchStory package downloaded.");
         } catch (err) {
             console.error(err);
             setJobStatus("Error", "warning");
@@ -284,6 +294,17 @@ if (downloadFstoryBtn) {
         } finally {
             downloadFstoryBtn.disabled = false;
         }
+    });
+}
+
+if (clearFstoryBtn) {
+    clearFstoryBtn.addEventListener("click", () => {
+        if (!currentFstoryContext) {
+            setStatus("No package loaded", "There is no local .fstory package to clear.");
+            return;
+        }
+        clearCurrentPackage(true);
+        setStatus("Package cleared", "Local package JSON and image memory were released.");
     });
 }
 
@@ -654,6 +675,8 @@ fetchBtn.addEventListener("click", () => {
     allowTempPageLoading = true;
     const appendFromJson = document.getElementById("appendFromJson").checked;
     if (!appendFromJson) {
+        FetchStoryPackage.dispose(currentFstoryContext);
+        currentFstoryContext = null;
         contentDiv.innerHTML = "";
         storyTitle.textContent = "";
         currentStoryData = null;
@@ -715,7 +738,7 @@ fetchBtn.addEventListener("click", () => {
             setFetchingState(false);
     };
 
-    activeEventSource.onmessage = (event) => {
+    activeEventSource.onmessage = async (event) => {
         const data = JSON.parse(event.data);
 
         if (data.error) {
@@ -744,17 +767,23 @@ fetchBtn.addEventListener("click", () => {
             currentPage = totalLoadedPages + 1;
             hasMorePages = totalLoadedPages > 0;
 
-            if (data.storyData) {
-                currentStoryData = normalizeStoryData(data.storyData);
-                currentStoryMeta = currentStoryData;
-            } else if (data.meta) {
-                finishCurrentStoryMeta();
-                currentStoryMeta = {
-                    ...currentStoryMeta,
-                    ...data.meta,
-                };
-            } else {
-                finishCurrentStoryMeta();
+            try {
+                const finalStory = await loadJobStory(currentStoryJobId);
+                applyStoryData(finalStory, {
+                    enableAppend: document.getElementById("appendFromJson").checked,
+                    jobId: currentStoryJobId,
+                });
+            } catch (err) {
+                console.warn("Final story reload failed:", err.message);
+                if (data.meta) {
+                    finishCurrentStoryMeta();
+                    currentStoryMeta = {
+                        ...currentStoryMeta,
+                        ...data.meta,
+                    };
+                } else {
+                    finishCurrentStoryMeta();
+                }
             }
             updateStoryMeta(currentStoryMeta);
             saveCache();
@@ -912,6 +941,8 @@ async function restoreFromCache(showMissingMessage) {
 document.getElementById("clearCache").addEventListener("click", async () => {
     localStorage.removeItem(cacheKey);
     await clearBrowserCache();
+    FetchStoryPackage.dispose(currentFstoryContext);
+    currentFstoryContext = null;
     allowTempPageLoading = false;
     contentDiv.innerHTML = "";
     storyTitle.textContent = "";
@@ -985,6 +1016,58 @@ document.getElementById("downloadBtn").addEventListener("click", async () => {
 
 document.getElementById("openReaderBtn").addEventListener("click", () => {
     window.open("/reader-translator", "_blank", "noopener");
+});
+
+async function downloadServerFile(endpoint, fallbackName) {
+    const title = storyTitle.textContent.trim() || "story";
+    const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, jobId: currentStoryJobId }),
+    });
+    if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || "Download generation failed");
+    }
+
+    const blob = await response.blob();
+    const disposition = response.headers.get("Content-Disposition") || "";
+    const encodedName = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+    const plainName = disposition.match(/filename="?([^";]+)"?/i);
+    const fileName = encodedName
+        ? decodeURIComponent(encodedName[1])
+        : plainName
+        ? plainName[1]
+        : fallbackName;
+    FetchStoryPackage.download(blob, fileName);
+}
+
+async function loadJobStory(jobId) {
+    const response = await fetch(`/api/story/jobs/${encodeURIComponent(jobId)}/story`);
+    const result = await response.json();
+    if (!response.ok || result.error || !result.storyData) {
+        throw new Error(result.error || "Updated story JSON could not be loaded");
+    }
+    return result.storyData;
+}
+
+function clearCurrentPackage(clearStory) {
+    FetchStoryPackage.dispose(currentFstoryContext);
+    currentFstoryContext = null;
+    if (!clearStory) return;
+
+    contentDiv.innerHTML = "";
+    storyTitle.textContent = "";
+    currentStoryData = null;
+    currentStoryMeta = {};
+    currentStoryJobId = "";
+    document.getElementById("appendFromJson").checked = false;
+    updateJobCard();
+    updateEmptyState();
+}
+
+window.addEventListener("beforeunload", () => {
+    FetchStoryPackage.dispose(currentFstoryContext);
 });
 
 async function logoutPublicSession() {
@@ -1063,6 +1146,9 @@ function applyStoryData(storyData, options = {}) {
 }
 
 function normalizeStoryData(storyData) {
+    const meta = storyData.meta || {};
+    const fetchInfo = storyData.fetch || {};
+    const stats = storyData.stats || {};
     const posts = storyData.posts || {};
     const directEngPosts = Object.fromEntries(
         Object.entries(posts).filter(([key, value]) => {
@@ -1078,21 +1164,21 @@ function normalizeStoryData(storyData) {
         .map((key) => Number.parseInt(key, 10))
         .filter((key) => Number.isInteger(key) && key > 0);
     const lastPostNo = postKeys.length ? Math.max(...postKeys) : 0;
-    const totalImages = Number(storyData["total-image"] || storyData.totalImages || countImagesInPosts(engPosts) || 0);
+    const totalImages = Number(storyData["total-image"] || storyData.totalImages || stats.totalImages || countImagesInPosts(engPosts) || 0);
 
     return {
         ...storyData,
-        url: storyData.url || "",
-        storyName: storyData.storyName || storyData.title || "Uploaded Story",
-        "writer-name": storyData["writer-name"] || storyData.writerName || storyData.author || "",
-        totalPage: Number(storyData.totalPage || storyData.totalPages || lastPostNo || 0),
-        lastFetch: storyData.lastFetch || new Date().toISOString(),
+        url: storyData.url || meta.url || "",
+        storyName: storyData.storyName || storyData.title || meta.storyName || "Uploaded Story",
+        "writer-name": storyData["writer-name"] || storyData.writerName || storyData.author || meta.writerName || "",
+        totalPage: Number(storyData.totalPage || storyData.totalPages || fetchInfo.totalPage || lastPostNo || 0),
+        lastFetch: storyData.lastFetch || fetchInfo.lastFetch || new Date().toISOString(),
         "total-image": totalImages,
-        "image-downlaods": Number(storyData["image-downlaods"] || storyData.downloadedImages || 0),
-        "start-time": storyData["start-time"] || "",
-        "end time": storyData["end time"] || "",
-        "duration taken": storyData["duration taken"] || "",
-        "last-page-no": Number(storyData["last-page-no"] || storyData.lastPageNo || lastPostNo || 0),
+        "image-downlaods": Number(storyData["image-downlaods"] || storyData.downloadedImages || stats.imageDownloads || 0),
+        "start-time": storyData["start-time"] || fetchInfo.startTime || "",
+        "end time": storyData["end time"] || fetchInfo.endTime || "",
+        "duration taken": storyData["duration taken"] || fetchInfo.durationText || "",
+        "last-page-no": Number(storyData["last-page-no"] || storyData.lastPageNo || fetchInfo.lastPageNo || lastPostNo || 0),
         posts: {
             eng: engPosts,
             hin: hindiPosts,
@@ -1336,7 +1422,7 @@ function sanitizeFileName(name) {
 }
 
 function saveCache() {
-    if (activeEventSource) {
+    if (activeEventSource || currentFstoryContext) {
         return;
     }
 

@@ -88,7 +88,7 @@
 							<h3>FetchStory Package</h3>
 							<div class="actionGrid">
 								<button id="insertFstoryBtn" type="button" title="Open a local .fstory package. The ZIP and images stay in this browser.">Open .fstory</button>
-								<button id="downloadFstoryBtn" type="button" title="Create an updated .fstory package locally in this browser.">Download .fstory</button>
+								<button id="clearFstoryBtn" type="button" title="Release the currently opened package and its local image memory.">Clear Package</button>
 							</div>
 						</div>
 						<div class="actionGroup section-json">
@@ -111,6 +111,7 @@
 							<h3>Output</h3>
 							<div class="actionGrid">
 								<button id="downloadBtn" type="button" title="Download the current story JSON and images as a ZIP.">Download ZIP</button>
+								<button id="downloadFstoryBtn" type="button" title="Create the current story and images as a local FetchStory package.">Download .fstory</button>
 								<button id="openReaderBtn" type="button" title="Open the reader page in a new tab.">Open Reader</button>
 								<button id="loadFromCache" type="button" title="Restore the last saved browser cache.">Load Cache</button>
 								<button id="clearCache" type="button" title="Clear the saved browser cache and reset the preview.">Clear Cache</button>
@@ -195,7 +196,7 @@
 		</main>
 
 		<script src="/vendor/jszip/jszip.min.js"></script>
-		<script src="./js/fstory.js"></script>
-		<script src="./js/index.js"></script>
+		<script src="./js/fstory.js?v=2"></script>
+		<script src="./js/index.js?v=2"></script>
 	</body>
 </html>

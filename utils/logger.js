@@ -4,8 +4,6 @@ const path = require("path");
 const logsFolder = path.join(__dirname, "..", "logs");
 const serverLogPath = path.join(logsFolder, "site-log.log");
 const crashLogPath = path.join(logsFolder, "server-crash.log");
-const settingsFolder = path.join(__dirname, "..", "data");
-const settingsPath = path.join(settingsFolder, "admin-settings.json");
 const maxLogBytes = 20 * 1024 * 1024;
 const originalConsole = {
 	log: console.log.bind(console),
@@ -21,17 +19,10 @@ function ensureLogsFolder() {
 	fs.mkdirSync(logsFolder, { recursive: true });
 }
 
-function ensureSettingsFolder() {
-	fs.mkdirSync(settingsFolder, { recursive: true });
-}
-
 function readSettings() {
 	try {
-		if (!fs.existsSync(settingsPath)) {
-			return { fileLoggingEnabled: true };
-		}
-
-		const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+		const { adminStoreRepository } = require("../src/core/appServices");
+		const settings = adminStoreRepository.loadStore().settings;
 		return {
 			fileLoggingEnabled: settings.fileLoggingEnabled !== false,
 		};
@@ -42,8 +33,13 @@ function readSettings() {
 }
 
 function writeSettings(settings) {
-	ensureSettingsFolder();
-	fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+	const { adminStoreRepository } = require("../src/core/appServices");
+	const store = adminStoreRepository.loadStore();
+	store.settings = {
+		...store.settings,
+		...settings,
+	};
+	adminStoreRepository.saveStore(store);
 }
 
 function isFileLoggingEnabled() {

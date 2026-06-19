@@ -1,11 +1,13 @@
 const express = require("express");
 const router = express.Router();
 
-const { streamStory, downloadStory, storyMeta, getSinglePage, uploadStoryJson, cleanUploadedStoryJson, processUploadedStoryImages, streamUploadedStoryImages } = require("../controllers/storyController");
+const { streamStory, downloadStory, downloadFetchStory, getJobStory, storyMeta, getSinglePage, uploadStoryJson, cleanUploadedStoryJson, processUploadedStoryImages, streamUploadedStoryImages } = require("../controllers/storyController");
 
 router.get("/stream", streamStory); // फ्रंटएंड: /api/story/stream
 router.get("/meta", storyMeta); // फ्रंटएंड: /api/story/meta
 router.post("/download", downloadStory);
+router.post("/download-fstory", downloadFetchStory);
+router.get("/jobs/:jobId/story", getJobStory);
 router.post("/upload-json", uploadStoryJson);
 router.post("/clean-uploaded-json", cleanUploadedStoryJson);
 router.post("/process-uploaded-images", processUploadedStoryImages);

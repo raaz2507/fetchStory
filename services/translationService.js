@@ -1,6 +1,4 @@
-const fs = require("fs");
-
-const processLegacyTranslation = require("../translator/services/processTranslation");
+const processCanonicalTranslation = require("../src/translator/processTranslation");
 
 async function processTranslation(storyData, jobId, expectedChecksum) {
 	const posts = storyData && storyData.posts ? storyData.posts : {};
@@ -9,36 +7,15 @@ async function processTranslation(storyData, jobId, expectedChecksum) {
 		posts: {
 			...posts,
 			eng: posts.eng || {},
-			hindi: {
+			hin: {
 				...(posts.hindi || {}),
 				...(posts.hin || {}),
 			},
 		},
 	};
+	delete normalizedStory.posts.hindi;
 
-	const result = await processLegacyTranslation(normalizedStory, jobId, expectedChecksum);
-	if (!result || !result.translatedPath) return result;
-
-	const translatedStory = JSON.parse(
-		await fs.promises.readFile(result.translatedPath, "utf8"),
-	);
-	const translatedPosts = translatedStory.posts || {};
-	translatedStory.posts = {
-		...translatedPosts,
-		eng: translatedPosts.eng || {},
-		hin: {
-			...(translatedPosts.hindi || {}),
-			...(translatedPosts.hin || {}),
-		},
-	};
-	delete translatedStory.posts.hindi;
-
-	await fs.promises.writeFile(
-		result.translatedPath,
-		JSON.stringify(translatedStory, null, 2),
-	);
-
-	return result;
+	return processCanonicalTranslation(normalizedStory, jobId, expectedChecksum);
 }
 
 module.exports = processTranslation;

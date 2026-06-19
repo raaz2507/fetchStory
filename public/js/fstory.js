@@ -120,8 +120,9 @@
 		for (const [entryPath, entry] of Object.entries(zip.files)) {
 			const normalized = normalizePath(entryPath);
 			if (entry.dir || !normalized.startsWith(imagesFolder)) continue;
-			const blob = await entry.async("blob");
-			images.set(normalized, blob);
+			const bytes = await entry.async("uint8array");
+			const blob = new Blob([bytes]);
+			images.set(normalized, bytes);
 			const objectUrl = URL.createObjectURL(blob);
 			objectUrls.set(normalized, objectUrl);
 			pathByObjectUrl.set(objectUrl, normalized);
@@ -200,16 +201,17 @@
 			try {
 				const response = await fetch(source, { credentials: "same-origin" });
 				if (!response.ok) throw new Error(`HTTP ${response.status}`);
-				const blob = await response.blob();
+				const contentType = response.headers.get("Content-Type") || "";
+				const bytes = new Uint8Array(await response.arrayBuffer());
 				const originalName = normalized.split("/").pop() || "";
 				const baseName = sanitizeFileName(originalName.replace(/\.[^.]+$/, ""), "image");
-				const extension = getExtension(source, blob.type);
+				const extension = getExtension(source, contentType);
 				let packagePath;
 				do {
 					imageCounter += 1;
 					packagePath = `${imagesFolder}${String(imageCounter).padStart(4, "0")}_${baseName}.${extension}`;
 				} while (images.has(packagePath));
-				images.set(packagePath, blob);
+				images.set(packagePath, bytes);
 				assignedPaths.set(source, packagePath);
 				return packagePath;
 			} catch (error) {
@@ -311,6 +313,9 @@
 	function dispose(context) {
 		if (!context || !context.objectUrls) return;
 		for (const url of context.objectUrls.values()) URL.revokeObjectURL(url);
+		context.objectUrls.clear();
+		context.pathByObjectUrl.clear();
+		context.images.clear();
 	}
 
 	global.FetchStoryPackage = {
