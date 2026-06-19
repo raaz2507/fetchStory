@@ -300,7 +300,7 @@ exports.streamStory = async (req, res) => {
 			cleanTempFolder(tempFolder);
 		}
 
-		// 3. JSON का शुरुआती ढांचा आपके नए फॉर्मेट (eng और hindi) के अनुसार सेट किया
+		// 3. JSON का शुरुआती ढांचा canonical eng और hin फॉर्मेट में सेट किया
 		const storyObj = effectiveAppendMode ? existingStoryData : createStoryDataShell(url, author, startedAt);
 		ensureStoryDataMeta(storyObj, url, author, startedAt);
 		
@@ -338,7 +338,7 @@ exports.streamStory = async (req, res) => {
 						let currentJson = liveStoryJson;
 
 						// ढांचा सुनिश्चित करें (Safety Check)
-						if (!currentJson.posts) currentJson.posts = { eng: {}, hindi: {} };
+						if (!currentJson.posts) currentJson.posts = { eng: {}, hin: {} };
 						if (!currentJson.posts.eng) currentJson.posts.eng = {};
 						if (!currentJson.posts.hin) currentJson.posts.hin = {};
 						ensureStoryDataMeta(currentJson, url, author, startedAt);

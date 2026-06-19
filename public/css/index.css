@@ -322,15 +322,40 @@ button:disabled {
 }
 
 .actionGroup {
+    --section-accent: var(--neutral);
+    --section-tint: color-mix(in srgb, var(--section-accent) 8%, transparent);
     display: grid;
     gap: 0.45rem;
+    padding: 0.7rem;
+    background: var(--section-tint);
+    border: 1px solid color-mix(in srgb, var(--section-accent) 32%, var(--border));
+    border-left: 4px solid var(--section-accent);
+    border-radius: 8px;
 }
 
 .actionGroup h3 {
     margin: 0;
-    color: var(--muted);
+    color: var(--section-accent);
     font-size: 0.78rem;
     font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.actionGroup.section-package {
+    --section-accent: #8b5cf6;
+}
+
+.actionGroup.section-json {
+    --section-accent: #3182ce;
+}
+
+.actionGroup.section-fetch {
+    --section-accent: #d97706;
+}
+
+.actionGroup.section-output {
+    --section-accent: #159667;
 }
 
 .actionGrid {

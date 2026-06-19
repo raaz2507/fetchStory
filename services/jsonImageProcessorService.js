@@ -4,7 +4,7 @@ const { createImageCache, downloadImageWithHash } = require("./imageService");
 
 async function processStoryJsonImages(storyData, baseFolder, progressCallback, options = {}) {
 	const story = normalizeStoryData(storyData);
-	const sections = ["eng", "hindi"];
+	const sections = ["eng", "hin"];
 	const postQueue = sections.flatMap((sectionName) => {
 		const posts = story.posts[sectionName];
 		return Object.keys(posts)
@@ -167,11 +167,20 @@ function getDownloadableImageUrl(value) {
 }
 
 function normalizeStoryData(storyData) {
+	const legacyHindiPosts = storyData.posts && storyData.posts.hindi
+		? storyData.posts.hindi
+		: {};
+	const hindiPosts = storyData.posts && storyData.posts.hin
+		? storyData.posts.hin
+		: {};
 	return {
 		...storyData,
 		posts: {
 			eng: storyData.posts && storyData.posts.eng ? storyData.posts.eng : {},
-			hindi: storyData.posts && storyData.posts.hindi ? storyData.posts.hindi : {},
+			hin: {
+				...legacyHindiPosts,
+				...hindiPosts,
+			},
 		},
 	};
 }

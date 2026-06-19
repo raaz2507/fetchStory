@@ -7,7 +7,7 @@ const storyRoutes = require("./routes/storyRoutes");
 const { router: readerRoutes, serveLocalImage } = require("./routes/readerRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const authRoutes = require("./routes/authRoutes");
-const translatorRoutes = require("./translator/routes/translateRoute");
+const translatorRoutes = require("./routes/translateRoutes");
 const translatorProgressRoutes = require("./translator/routes/progressRoute");
 const { requirePublicAuth, redirectToPublicLogin } = require("./controllers/adminController");
 
@@ -59,6 +59,7 @@ app.get("/reader-translator", redirectToPublicLogin, (req, res) => {
 	res.sendFile(path.join(__dirname, "public", "reader_template.html"));
 });
 app.use(express.static("public"));
+app.use("/vendor/jszip", express.static(path.join(__dirname, "node_modules", "jszip", "dist")));
 
 app.use((req, res, next) => {
 	const startedAt = Date.now();

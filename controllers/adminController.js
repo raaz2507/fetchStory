@@ -13,11 +13,16 @@ const rootFolder = path.join(__dirname, "..");
 const tempJobsFolder = path.join(rootFolder, "temp", "jobs");
 const outputsFolder = path.join(rootFolder, "translator", "outputs");
 const logsFolder = path.join(rootFolder, "logs");
-const dataFolder = path.join(rootFolder, "data");
+const dataFolder = process.env.FETCHSTORY_DATA_DIR
+    ? path.resolve(process.env.FETCHSTORY_DATA_DIR)
+    : path.join(rootFolder, "data");
 const storePath = path.join(dataFolder, "admin-store.json");
 const sessions = new Map();
 const publicSessions = new Map();
 const publicSessionDurationMs = 1000 * 60 * 60 * 24 * 7;
+let cachedStore = null;
+let storeLoadPromise = null;
+let storeWriteQueue = Promise.resolve();
 
 const defaultStore = {
     settings: {
@@ -487,7 +492,9 @@ async function listTranslatedStories() {
         const stat = await fs.promises.stat(filePath);
         const jobId = fileName.replace(/^translated_story_/i, "").replace(/\.json$/i, "");
         const engPosts = story && story.posts && story.posts.eng ? story.posts.eng : {};
-        const hindiPosts = story && story.posts && story.posts.hindi ? story.posts.hindi : {};
+        const hindiPosts = story && story.posts
+            ? (story.posts.hin || story.posts.hindi || {})
+            : {};
         const notFoundName = `not_found_words_${jobId}.json`;
         const notFoundPath = path.join(outputsFolder, notFoundName);
 
@@ -571,38 +578,70 @@ function getTimeValue(value) {
 }
 
 async function getStore() {
-    await fs.promises.mkdir(dataFolder, { recursive: true });
-    let store = null;
+    if (cachedStore) return cachedStore;
+    if (storeLoadPromise) return storeLoadPromise;
+
+    storeLoadPromise = (async () => {
+        await fs.promises.mkdir(dataFolder, { recursive: true });
+        let store = null;
+        let shouldSave = false;
+
+        try {
+            if (fs.existsSync(storePath)) {
+                store = JSON.parse(await fs.promises.readFile(storePath, "utf8"));
+            } else {
+                shouldSave = true;
+            }
+        } catch (err) {
+            console.warn("Admin store read failed, recreating:", err.message);
+            shouldSave = true;
+        }
+
+        store = normalizeStore(store || defaultStore);
+        if (!store.users.length) {
+            store.users.push({
+                id: crypto.randomUUID(),
+                username: "admin",
+                role: "admin",
+                blocked: false,
+                approved: true,
+                passwordHash: hashPassword("admin123"),
+                createdAt: new Date().toISOString(),
+                lastLoginAt: "",
+            });
+            shouldSave = true;
+        }
+
+        cachedStore = store;
+        if (shouldSave) await saveStore(store);
+        return cachedStore;
+    })();
 
     try {
-        if (fs.existsSync(storePath)) {
-            store = JSON.parse(await fs.promises.readFile(storePath, "utf8"));
-        }
-    } catch (err) {
-        console.warn("Admin store read failed, recreating:", err.message);
+        return await storeLoadPromise;
+    } finally {
+        storeLoadPromise = null;
     }
-
-    store = normalizeStore(store || defaultStore);
-    if (!store.users.length) {
-        store.users.push({
-            id: crypto.randomUUID(),
-            username: "admin",
-            role: "admin",
-            blocked: false,
-            approved: true,
-            passwordHash: hashPassword("admin123"),
-            createdAt: new Date().toISOString(),
-            lastLoginAt: "",
-        });
-    }
-
-    await saveStore(store);
-    return store;
 }
 
 async function saveStore(store) {
-    await fs.promises.mkdir(dataFolder, { recursive: true });
-    await fs.promises.writeFile(storePath, JSON.stringify(normalizeStore(store), null, 2));
+    const normalizedStore = normalizeStore(store);
+    Object.assign(store, normalizedStore);
+    cachedStore = store;
+    const contents = JSON.stringify(normalizedStore, null, 2);
+
+    storeWriteQueue = storeWriteQueue
+        .catch((err) => {
+            console.error("Previous admin store write failed:", err.message);
+        })
+        .then(async () => {
+            await fs.promises.mkdir(dataFolder, { recursive: true });
+            const tempPath = `${storePath}.${crypto.randomUUID()}.tmp`;
+            await fs.promises.writeFile(tempPath, contents);
+            await fs.promises.rename(tempPath, storePath);
+        });
+
+    return storeWriteQueue;
 }
 
 function normalizeStore(store) {

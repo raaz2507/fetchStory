@@ -82,8 +82,16 @@
 				<section class="panelSection" aria-label="Story actions" title="Upload, fetch, process, and output commands.">
 					<h2>Actions</h2>
 					<input type="file" id="jsonUploadInput" accept=".json,application/json" hidden title="Select a story JSON file." />
+					<input type="file" id="fstoryUploadInput" accept=".fstory,application/zip" hidden title="Select a FetchStory package." />
 					<div class="actionGroups">
-						<div class="actionGroup">
+						<div class="actionGroup section-package">
+							<h3>FetchStory Package</h3>
+							<div class="actionGrid">
+								<button id="insertFstoryBtn" type="button" title="Open a local .fstory package. The ZIP and images stay in this browser.">Open .fstory</button>
+								<button id="downloadFstoryBtn" type="button" title="Create an updated .fstory package locally in this browser.">Download .fstory</button>
+							</div>
+						</div>
+						<div class="actionGroup section-json">
 							<h3>JSON</h3>
 							<div class="actionGrid">
 								<button id="insertJsonBtn" type="button" title="Upload an existing story JSON and update the preview.">Insert JSON</button>
@@ -91,7 +99,7 @@
 								<button id="processUploadedImagesBtn" type="button" title="Download images referenced by the uploaded JSON.">Process Images</button>
 							</div>
 						</div>
-						<div class="actionGroup">
+						<div class="actionGroup section-fetch">
 							<h3>Fetch</h3>
 							<div class="actionGrid">
 								<button id="getMeta" type="button" title="Detect story title, writer, and total pages.">Get Meta</button>
@@ -99,7 +107,7 @@
 								<button id="cancelFetchBtn" type="button" disabled title="Cancel the currently running fetch or image process.">Cancel Fetch</button>
 							</div>
 						</div>
-						<div class="actionGroup">
+						<div class="actionGroup section-output">
 							<h3>Output</h3>
 							<div class="actionGrid">
 								<button id="downloadBtn" type="button" title="Download the current story JSON and images as a ZIP.">Download ZIP</button>
@@ -186,6 +194,8 @@
 			</section>
 		</main>
 
+		<script src="/vendor/jszip/jszip.min.js"></script>
+		<script src="./js/fstory.js"></script>
 		<script src="./js/index.js"></script>
 	</body>
 </html>

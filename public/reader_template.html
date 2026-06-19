@@ -13,25 +13,33 @@
 
 		<div class="side-control-bar" id="side-control-bar">
 			<div class="common-sidebar-controls" aria-label="Shared story controls">
-				<div class="control-group">
+				<div class="control-group section-story">
 					<label>Story File</label>
 					<label for="jsonFile" class="btn-common browse-label">Browse JSON</label>
 					<input type="file" id="jsonFile" accept=".json" onchange="handleFileSelect(event)" />
 					<span id="file-name-display" style="font-size: 0.8rem; opacity: 0.7; font-style: italic; text-align: center">No file chosen</span>
 				</div>
 
-				<div class="control-group">
+				<div class="control-group section-package">
+					<label>FetchStory Package</label>
+					<label for="fstoryFile" class="btn-common browse-label">Open .fstory</label>
+					<input type="file" id="fstoryFile" accept=".fstory,application/zip" hidden />
+					<button class="btn-common download-link" id="downloadFstoryBtn" type="button">Download Updated .fstory</button>
+					<span id="fstory-status" class="small-status"></span>
+				</div>
+
+				<div class="control-group section-images">
 					<label for="imageFolderPicker" class="btn-common browse-label">Browse Image Folder</label>
 					<input type="file" id="imageFolderPicker" webkitdirectory directory multiple hidden />
 					<span id="image-folder-status" class="small-status"></span>
 				</div>
 
-				<div class="control-group">
+				<div class="control-group section-cache">
 					<label>Cache</label>
 					<button class="btn-common clear-cache-btn" id="clear-cache-btn">Clear Cache</button>
 				</div>
 
-				<div class="control-group">
+				<div class="control-group section-session">
 					<label>Session</label>
 					<button class="btn-common logout-btn" id="logoutBtn" type="button">Logout</button>
 				</div>
@@ -43,7 +51,7 @@
 			</div>
 
 			<div class="tab-panel active" id="reader-tab-panel">
-				<div class="control-group">
+				<div class="control-group section-reading">
 					<label>Loading Mode</label>
 					<div class="statusBox">
 						<p id="read-progress">Read: 0%</p>
@@ -51,7 +59,7 @@
 					<button class="btn-common load-all-btn" id="load-all-btn" onclick="loadWholeStory()">Load All Parts</button>
 				</div>
 
-				<div class="control-group">
+				<div class="control-group section-font">
 					<label>Font Size</label>
 					<div class="font-controls">
 						<button class="font-btn" onclick="adjustFontSize(-0.1)">A -</button>
@@ -59,7 +67,7 @@
 					</div>
 				</div>
 
-				<div class="control-group">
+				<div class="control-group section-theme">
 					<label>Reading Theme</label>
 					<select class="theme-select" id="theme-select" onchange="changeTheme(this.value)">
 						<option value="light">Light Theme</option>
@@ -70,7 +78,7 @@
 					</select>
 				</div>
 
-				<div class="control-group">
+				<div class="control-group section-color">
 					<label>Custom Bg Color</label>
 					<div class="color-picker-wrapper">
 						<input type="color" id="bg-color-picker" class="color-input" value="#f4f4f9" oninput="setCustomBg(this.value)" />
@@ -78,7 +86,7 @@
 					</div>
 				</div>
 
-				<div class="control-group">
+				<div class="control-group section-actions">
 					<label>Actions</label>
 					<button class="btn-common language-toggle-btn" id="lang-toggle-btn" onclick="toggleLanguage()">Switch to Hindi</button>
 					<button class="btn-common print-btn" style="margin-top: 8px" onclick="handlePrint()">Print Story</button>
@@ -86,7 +94,7 @@
 			</div>
 
 			<div class="tab-panel" id="translator-tab-panel">
-				<div class="control-group">
+				<div class="control-group section-translator">
 					<label>Translate</label>
 					<button class="btn-common translate-btn" id="translateBtn">Translate Story</button>
 					<button class="btn-common stop-translate-btn hide" id="stopTranslateBtn">Stop Translation</button>
@@ -118,6 +126,8 @@
 			<div id="content-area">Story Content</div>
 			<div id="reader-status" class="loading-status">Waiting for JSON data...</div>
 		</div>
+		<script src="/vendor/jszip/jszip.min.js"></script>
+		<script src="./js/fstory.js"></script>
 		<script src="./js/reader.js"></script>
 	</body>
 </html>

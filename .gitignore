@@ -4,6 +4,7 @@
 /data/
 /translator/outputs/
 /node_modules/
+/.npm-cache/
 
 package-lock.json
 

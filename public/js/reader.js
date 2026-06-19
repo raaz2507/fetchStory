@@ -35,11 +35,15 @@ const totalWordsInput = document.getElementById("total_words");
 const notFoundWordsInput = document.getElementById("not_found_words");
 const conversionPercentInput = document.getElementById("con_per");
 const logoutBtn = document.getElementById("logoutBtn");
+const fstoryFileInput = document.getElementById("fstoryFile");
+const downloadFstoryBtn = document.getElementById("downloadFstoryBtn");
+const fstoryStatus = document.getElementById("fstory-status");
 let useLocalImageFolder = false;
 let activeTranslationJobId = null;
 let activeTranslationSource = null;
 let lastScrollSaveAt = 0;
 let isRestoringScroll = false;
+let currentFstoryContext = null;
 
 const nativeFetch = window.fetch.bind(window);
 window.fetch = async (input, init = {}) => {
@@ -128,6 +132,9 @@ if (contentArea) {
 		const file = event.target.files[0];
 		if (!file) return;
 
+		FetchStoryPackage.dispose(currentFstoryContext);
+		currentFstoryContext = null;
+		if (fstoryStatus) fstoryStatus.textContent = "";
 		fileNameDisplay.textContent = file.name;
 		statusDiv.textContent = "Reading selected file...";
 
@@ -162,6 +169,51 @@ if (contentArea) {
 
 	if (logoutBtn) {
 		logoutBtn.addEventListener("click", logoutPublicSession);
+	}
+
+	if (fstoryFileInput) {
+		fstoryFileInput.addEventListener("change", async () => {
+			const file = fstoryFileInput.files && fstoryFileInput.files[0];
+			if (!file) return;
+
+			try {
+				if (fstoryStatus) fstoryStatus.textContent = "Opening package...";
+				const opened = await FetchStoryPackage.open(file);
+				FetchStoryPackage.dispose(currentFstoryContext);
+				currentFstoryContext = opened.context;
+				fileNameDisplay.textContent = `${file.name} (${opened.manifest.contentFile})`;
+				initStoryRender(opened.rawStoryData, { saveToCache: false });
+				if (fstoryStatus) fstoryStatus.textContent = "Package loaded locally";
+			} catch (err) {
+				console.error(err);
+				if (fstoryStatus) fstoryStatus.textContent = err.message || "Invalid .fstory";
+				statusDiv.textContent = "Error: Could not open FetchStory package.";
+			} finally {
+				fstoryFileInput.value = "";
+			}
+		});
+	}
+
+	if (downloadFstoryBtn) {
+		downloadFstoryBtn.addEventListener("click", async () => {
+			if (!storyData) {
+				if (fstoryStatus) fstoryStatus.textContent = "Load a story first";
+				return;
+			}
+
+			try {
+				downloadFstoryBtn.disabled = true;
+				if (fstoryStatus) fstoryStatus.textContent = "Building updated package...";
+				const result = await FetchStoryPackage.build(storyData, currentFstoryContext);
+				FetchStoryPackage.download(result.blob, result.fileName);
+				if (fstoryStatus) fstoryStatus.textContent = `${result.fileName} downloaded`;
+			} catch (err) {
+				console.error(err);
+				if (fstoryStatus) fstoryStatus.textContent = err.message || "Package download failed";
+			} finally {
+				downloadFstoryBtn.disabled = false;
+			}
+		});
 	}
 
 	const savedImageFolderPath = localStorage.getItem("readerImageFolderPath") || "";
@@ -552,7 +604,10 @@ if (contentArea) {
 
 	function initStoryRender(data, options = {}) {
 		contentArea.innerHTML = "";
-		storyData = data;
+		const normalizedStory = FetchStoryPackage.normalizeStoryLanguages(data);
+		storyData = currentFstoryContext
+			? FetchStoryPackage.materialize(normalizedStory, currentFstoryContext)
+			: normalizedStory;
 		keyIndex = 0;
 		isLoading = false;
 		statusDiv.textContent = "";

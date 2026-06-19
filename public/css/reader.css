@@ -101,20 +101,69 @@
 }
 
 .control-group {
+	--section-accent: var(--neutral);
+	--section-tint: color-mix(in srgb, var(--section-accent) 8%, transparent);
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
-	padding-bottom: 15px;
-	border-bottom: 1px solid var(--border-color);
+	padding: 12px;
+	background: var(--section-tint);
+	border: 1px solid color-mix(in srgb, var(--section-accent) 32%, var(--border-color));
+	border-left: 4px solid var(--section-accent);
+	border-radius: 8px;
 }
 
 .control-group label {
-	color: var(--text-color);
+	color: var(--section-accent);
 	font-size: 0.85rem;
 	font-weight: 700;
 	letter-spacing: 0.5px;
 	text-transform: uppercase;
 	opacity: 0.82;
+}
+
+.control-group.section-story {
+	--section-accent: #3182ce;
+}
+
+.control-group.section-package {
+	--section-accent: #8b5cf6;
+}
+
+.control-group.section-images {
+	--section-accent: #d97706;
+}
+
+.control-group.section-cache {
+	--section-accent: #dc5a5a;
+}
+
+.control-group.section-session {
+	--section-accent: #b4233c;
+}
+
+.control-group.section-reading {
+	--section-accent: #159667;
+}
+
+.control-group.section-font {
+	--section-accent: #0f9f9a;
+}
+
+.control-group.section-theme {
+	--section-accent: #5864c7;
+}
+
+.control-group.section-color {
+	--section-accent: #b83973;
+}
+
+.control-group.section-actions {
+	--section-accent: #1769aa;
+}
+
+.control-group.section-translator {
+	--section-accent: #0891b2;
 }
 
 .btn-common,
