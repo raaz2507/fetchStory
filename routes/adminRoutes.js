@@ -10,6 +10,8 @@ const {
     clearOutputs,
     createUser,
     updateUser,
+    deleteUser,
+    clearActivity,
     reviewModerationItem,
     exportStore,
     restoreStore,
@@ -28,6 +30,8 @@ router.post("/logging", updateLogging);
 router.delete("/outputs", clearOutputs);
 router.post("/users", createUser);
 router.patch("/users/:id", updateUser);
+router.delete("/users/:id", deleteUser);
+router.delete("/activity", clearActivity);
 router.post("/moderation/:id/review", reviewModerationItem);
 router.get("/store/export", exportStore);
 router.post("/store/restore", restoreStore);

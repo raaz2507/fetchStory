@@ -140,6 +140,18 @@ class AdminStoreRepository {
 		`).get(username));
 	}
 
+	deleteUser(id) {
+		return this.database.prepare("DELETE FROM users WHERE id = ?").run(id).changes;
+	}
+
+	countUsersByRole(role) {
+		return Number(
+			this.database.prepare(
+				"SELECT COUNT(*) AS count FROM users WHERE role = ?",
+			).get(role).count,
+		);
+	}
+
 	createSession(token, userId, sessionType, expiresAt) {
 		const now = new Date().toISOString();
 		this.database.transaction(() => {
@@ -215,6 +227,52 @@ class AdminStoreRepository {
 			detail: row.detail,
 			createdAt: row.created_at,
 		}));
+	}
+
+	addActivity(type, actor, detail) {
+		const item = {
+			id: crypto.randomUUID(),
+			type: String(type || "activity"),
+			actor: String(actor || ""),
+			detail: String(detail || ""),
+			createdAt: new Date().toISOString(),
+		};
+
+		this.database.transaction(() => {
+			this.database.prepare(`
+				INSERT INTO activity_logs(id, type, actor, detail, created_at)
+				VALUES (?, ?, ?, ?, ?)
+			`).run(item.id, item.type, item.actor, item.detail, item.createdAt);
+			this.database.exec(`
+				DELETE FROM activity_logs
+				WHERE id NOT IN (
+					SELECT id FROM activity_logs
+					ORDER BY created_at DESC, rowid DESC
+					LIMIT 250
+				)
+			`);
+		});
+
+		return item;
+	}
+
+	clearActivity() {
+		return this.database.prepare("DELETE FROM activity_logs").run().changes;
+	}
+
+	getSetting(key, fallbackValue = null) {
+		const row = this.database.prepare(
+			"SELECT value FROM settings WHERE key = ?",
+		).get(key);
+		return row ? parseJsonValue(row.value) : fallbackValue;
+	}
+
+	setSetting(key, value) {
+		this.database.prepare(`
+			INSERT INTO settings(key, value) VALUES (?, ?)
+			ON CONFLICT(key) DO UPDATE SET value = excluded.value
+		`).run(key, JSON.stringify(value));
+		return value;
 	}
 
 	importLegacyStoreOnce() {

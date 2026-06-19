@@ -7,7 +7,7 @@
 		<link rel="stylesheet" href="./css/reader.css" />
 	</head>
 	<body>
-		<button class="sidebar-toggle-btn" onclick="toggleSidebar(event)">
+		<button class="sidebar-toggle-btn" id="sidebar-toggle-btn" type="button">
 			<span id="toggle-text">Menu</span>
 		</button>
 
@@ -16,7 +16,7 @@
 				<div class="control-group section-story">
 					<label>Story File</label>
 					<label for="jsonFile" class="btn-common browse-label">Browse JSON</label>
-					<input type="file" id="jsonFile" accept=".json" onchange="handleFileSelect(event)" />
+					<input type="file" id="jsonFile" accept=".json" />
 					<span id="file-name-display" style="font-size: 0.8rem; opacity: 0.7; font-style: italic; text-align: center">No file chosen</span>
 				</div>
 
@@ -48,8 +48,8 @@
 			</div>
 
 			<div class="sidebar-tabs">
-				<button type="button" class="sidebar-tab-btn active" id="reader-tab-btn" onclick="switchSidebarTab('reader')">Reader</button>
-				<button type="button" class="sidebar-tab-btn" id="translator-tab-btn" onclick="switchSidebarTab('translator')">Translator</button>
+				<button type="button" class="sidebar-tab-btn active" id="reader-tab-btn">Reader</button>
+				<button type="button" class="sidebar-tab-btn" id="translator-tab-btn">Translator</button>
 			</div>
 
 			<div class="tab-panel active" id="reader-tab-panel">
@@ -58,20 +58,20 @@
 					<div class="statusBox">
 						<p id="read-progress">Read: 0%</p>
 					</div>
-					<button class="btn-common load-all-btn" id="load-all-btn" onclick="loadWholeStory()">Load All Parts</button>
+					<button class="btn-common load-all-btn" id="load-all-btn" type="button">Load All Parts</button>
 				</div>
 
 				<div class="control-group section-font">
 					<label>Font Size</label>
 					<div class="font-controls">
-						<button class="font-btn" onclick="adjustFontSize(-0.1)">A -</button>
-						<button class="font-btn" onclick="adjustFontSize(0.1)">A +</button>
+						<button class="font-btn" id="decrease-font-btn" type="button">A -</button>
+						<button class="font-btn" id="increase-font-btn" type="button">A +</button>
 					</div>
 				</div>
 
 				<div class="control-group section-theme">
 					<label>Reading Theme</label>
-					<select class="theme-select" id="theme-select" onchange="changeTheme(this.value)">
+					<select class="theme-select" id="theme-select">
 						<option value="light">Light Theme</option>
 						<option value="dark">Dark Theme</option>
 						<option value="sepia">Sepia Theme</option>
@@ -83,15 +83,15 @@
 				<div class="control-group section-color">
 					<label>Custom Bg Color</label>
 					<div class="color-picker-wrapper">
-						<input type="color" id="bg-color-picker" class="color-input" value="#f4f4f9" oninput="setCustomBg(this.value)" />
+						<input type="color" id="bg-color-picker" class="color-input" value="#f4f4f9" />
 						<span style="font-size: 0.85rem">Choose Custom Color</span>
 					</div>
 				</div>
 
 				<div class="control-group section-actions">
 					<label>Actions</label>
-					<button class="btn-common language-toggle-btn" id="lang-toggle-btn" onclick="toggleLanguage()">Switch to Hindi</button>
-					<button class="btn-common print-btn" style="margin-top: 8px" onclick="handlePrint()">Print Story</button>
+					<button class="btn-common language-toggle-btn" id="lang-toggle-btn" type="button">Switch to Hindi</button>
+					<button class="btn-common print-btn" id="print-btn" type="button" style="margin-top: 8px">Print Story</button>
 				</div>
 			</div>
 
@@ -129,7 +129,6 @@
 			<div id="reader-status" class="loading-status">Waiting for JSON data...</div>
 		</div>
 		<script src="/vendor/jszip/jszip.min.js"></script>
-		<script src="./js/fstory.js?v=2"></script>
-		<script src="./js/reader.js?v=2"></script>
+		<script type="module" src="./js/reader.js?v=6"></script>
 	</body>
 </html>

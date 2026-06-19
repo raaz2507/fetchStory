@@ -347,6 +347,38 @@ exports.updateUser = async (req, res) => {
     }
 };
 
+exports.deleteUser = async (req, res) => {
+	try {
+		const user = adminStoreRepository.findUserById(req.params.id);
+		if (!user) return res.status(404).json({ error: "User not found" });
+		if (user.id === req.adminUser.id) {
+			return res.status(400).json({ error: "Current admin user cannot remove itself" });
+		}
+		if (user.role === "admin" && adminStoreRepository.countUsersByRole("admin") <= 1) {
+			return res.status(400).json({ error: "Last admin user cannot be removed" });
+		}
+
+		const deletedCount = adminStoreRepository.deleteUser(user.id);
+		if (!deletedCount) return res.status(404).json({ error: "User not found" });
+
+		await addActivity("user_removed", req.adminUser.username, `${user.username} removed`);
+		res.json({ ok: true, user: sanitizeUser(user) });
+	} catch (err) {
+		console.error("Admin user remove error:", err);
+		res.status(500).json({ error: "User remove failed: " + err.message });
+	}
+};
+
+exports.clearActivity = async (req, res) => {
+	try {
+		const deletedCount = adminStoreRepository.clearActivity();
+		res.json({ ok: true, deletedCount });
+	} catch (err) {
+		console.error("Admin activity clear error:", err);
+		res.status(500).json({ error: "Activity clear failed: " + err.message });
+	}
+};
+
 exports.reviewModerationItem = async (req, res) => {
     try {
         const store = await getStore();
@@ -581,16 +613,7 @@ function normalizeStore(store) {
 }
 
 async function addActivity(type, actor, detail) {
-    const store = await getStore();
-    store.activity.unshift({
-        id: crypto.randomUUID(),
-        type,
-        actor,
-        detail,
-        createdAt: new Date().toISOString(),
-    });
-    store.activity = store.activity.slice(0, 250);
-    await saveStore(store);
+    adminStoreRepository.addActivity(type, actor, detail);
 }
 
 function sanitizeUser(user) {

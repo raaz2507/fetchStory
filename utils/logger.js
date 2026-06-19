@@ -22,9 +22,11 @@ function ensureLogsFolder() {
 function readSettings() {
 	try {
 		const { adminStoreRepository } = require("../src/core/appServices");
-		const settings = adminStoreRepository.loadStore().settings;
 		return {
-			fileLoggingEnabled: settings.fileLoggingEnabled !== false,
+			fileLoggingEnabled: adminStoreRepository.getSetting(
+				"fileLoggingEnabled",
+				true,
+			) !== false,
 		};
 	} catch (err) {
 		originalConsole.error("Could not read admin settings:", err.message);
@@ -34,12 +36,9 @@ function readSettings() {
 
 function writeSettings(settings) {
 	const { adminStoreRepository } = require("../src/core/appServices");
-	const store = adminStoreRepository.loadStore();
-	store.settings = {
-		...store.settings,
-		...settings,
-	};
-	adminStoreRepository.saveStore(store);
+	for (const [key, value] of Object.entries(settings)) {
+		adminStoreRepository.setSetting(key, value);
+	}
 }
 
 function isFileLoggingEnabled() {

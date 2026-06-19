@@ -104,3 +104,28 @@ test("legacy admin JSON is imported only once", () => {
 	reopenedDatabase.close();
 	fs.rmSync(folder, { recursive: true, force: true });
 });
+
+test("audit activity is stored separately and capped", () => {
+	const folder = fs.mkdtempSync(path.join(os.tmpdir(), "fetchstory-audit-"));
+	const database = new Database(path.join(folder, "users.sqlite"));
+	const auth = new AuthService(null);
+	const repository = new AdminStoreRepository(database, {
+		defaultAdminPasswordHash: auth.hashPassword("fallback"),
+	});
+
+	for (let index = 0; index < 260; index++) {
+		repository.addActivity("user_action", "tester", `event-${index}`);
+	}
+
+	const activity = repository.listActivity(300);
+	const tables = database.prepare(
+		"SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
+	).all().map((row) => row.name);
+
+	assert.equal(activity.length, 250);
+	assert.equal(activity[0].detail, "event-259");
+	assert.equal(tables.includes("technical_logs"), false);
+
+	database.close();
+	fs.rmSync(folder, { recursive: true, force: true });
+});

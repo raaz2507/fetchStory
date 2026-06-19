@@ -22,6 +22,17 @@ downloads/
 
 Stories and images are not stored in SQLite.
 
+## Logging boundary
+
+- SQLite `activity_logs` contains structured audit events such as registration,
+  login, approval, blocking, role changes, and admin actions.
+- `logs/site-log.log` contains technical server, scraper, request, and diagnostic
+  messages.
+- `logs/server-crash.log` contains uncaught crashes.
+
+Technical log lines are never inserted into SQLite. Audit history is capped at
+the latest 250 entries, while technical files rotate at 20 MB.
+
 ## Request flow
 
 ```text
