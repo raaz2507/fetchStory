@@ -1,12 +1,13 @@
-import FetchStoryPackage from "./fstory.js?v=5";
-import StoryCache from "./storyCache.js?v=2";
+import FetchStoryPackage from "./fstory.js?v=9";
+import StoryCache from "./storyCache.js?v=3";
 
 export class StoryScraperApp {
     constructor() {
         // configuration constants
         this.CONFIG = {
             CACHE_KEY: "storyScraper:lastStory",
-            THEME_KEY: "storyScraper:theme"
+            THEME_KEY: "storyScraper:theme",
+            ACTIVE_FETCH_KEY: "storyScraper:activeFetch"
         };
 
         this.initDOMElements();
@@ -55,15 +56,15 @@ export class StoryScraperApp {
             controlPanelToggle: document.getElementById("controlPanelToggle"),
             summaryPanel: document.getElementById("summaryPanel"),
             summaryPanelToggle: document.getElementById("summaryPanelToggle"),
+            panelBackdrop: document.getElementById("panelBackdrop"),
+            panelCloseButtons: document.querySelectorAll("[data-close-panel]"),
             fetchBtn: document.getElementById("fetchBtn"),
+            fetchDeletedBtn: document.getElementById("fetchDeletedBtn"),
             cancelFetchBtn: document.getElementById("cancelFetchBtn"),
-            insertJsonBtn: document.getElementById("insertJsonBtn"),
-            jsonUploadInput: document.getElementById("jsonUploadInput"),
             insertFstoryBtn: document.getElementById("insertFstoryBtn"),
             fstoryUploadInput: document.getElementById("fstoryUploadInput"),
             downloadFstoryBtn: document.getElementById("downloadFstoryBtn"),
             clearFstoryBtn: document.getElementById("clearFstoryBtn"),
-            cleanUploadedJsonBtn: document.getElementById("cleanUploadedJsonBtn"),
             processUploadedImagesBtn: document.getElementById("processUploadedImagesBtn"),
             logoutBtn: document.getElementById("logoutBtn"),
             themeSelect: document.getElementById("themeSelect"),
@@ -73,10 +74,11 @@ export class StoryScraperApp {
             startPage: document.getElementById("startPage"),
             endPage: document.getElementById("endPage"),
             loadImages: document.getElementById("loadImages"),
+            imageConcurrency: document.getElementById("imageConcurrency"),
+            imageRetries: document.getElementById("imageRetries"),
             getMetaBtn: document.getElementById("getMeta"),
             loadFromCacheBtn: document.getElementById("loadFromCache"),
             clearCacheBtn: document.getElementById("clearCache"),
-            downloadBtn: document.getElementById("downloadBtn"),
             openReaderBtn: document.getElementById("openReaderBtn")
         };
     }
@@ -126,9 +128,10 @@ export class StoryScraperApp {
     /**
      * एप्लीकेशन का डिफ़ॉल्ट इनिशियल सेटअप लोड करना
      */
-    initializeApplication() {
+    async initializeApplication() {
         this.applyTheme(localStorage.getItem(this.CONFIG.THEME_KEY) || "light");
-        this.restoreFromCache(false);
+        const resumed = await this.restoreInterruptedFetch();
+        if (!resumed) await this.restoreFromCache(false);
         this.resetWarnings();
         this.updateEmptyState();
         this.updateJobCard();
@@ -177,7 +180,7 @@ export class StoryScraperApp {
             this.dom.controlPanel.addEventListener("click", (e) => e.stopPropagation());
             document.addEventListener("click", () => this.closeControlPanel());
             document.addEventListener("keydown", (e) => e.key === "Escape" && this.closeControlPanel());
-            window.addEventListener("resize", () => window.innerWidth > 980 && this.closeControlPanel());
+            window.addEventListener("resize", () => window.innerWidth > 820 && this.closeControlPanel());
         }
 
         // Summary Panel Toggles
@@ -189,16 +192,26 @@ export class StoryScraperApp {
             this.dom.summaryPanel.addEventListener("click", (e) => e.stopPropagation());
             document.addEventListener("click", () => this.closeSummaryPanel());
             document.addEventListener("keydown", (e) => e.key === "Escape" && this.closeSummaryPanel());
-            window.addEventListener("resize", () => window.innerWidth > 980 && this.closeSummaryPanel());
+            window.addEventListener("resize", () => window.innerWidth > 820 && this.closeSummaryPanel());
+        }
+
+        if (this.dom.panelCloseButtons) {
+            this.dom.panelCloseButtons.forEach((button) => {
+                button.addEventListener("click", () => {
+                    if (button.dataset.closePanel === "status") this.closeSummaryPanel();
+                    else this.closeControlPanel();
+                });
+            });
+        }
+        if (this.dom.panelBackdrop) {
+            this.dom.panelBackdrop.addEventListener("click", () => {
+                this.closeControlPanel();
+                this.closeSummaryPanel();
+            });
         }
 
         // Auth & Action Buttons
         if (this.dom.logoutBtn) this.dom.logoutBtn.addEventListener("click", () => this.logoutPublicSession());
-        if (this.dom.insertJsonBtn && this.dom.jsonUploadInput) {
-            this.dom.insertJsonBtn.addEventListener("click", () => this.dom.jsonUploadInput.click());
-            this.dom.jsonUploadInput.addEventListener("change", () => this.handleJsonUpload());
-        }
-
         // Fstory Package Handlers
         if (this.dom.insertFstoryBtn && this.dom.fstoryUploadInput) {
             this.dom.insertFstoryBtn.addEventListener("click", () => this.dom.fstoryUploadInput.click());
@@ -208,16 +221,15 @@ export class StoryScraperApp {
         if (this.dom.clearFstoryBtn) this.dom.clearFstoryBtn.addEventListener("click", () => this.handleFstoryClear());
 
         // Process Buttons
-        if (this.dom.cleanUploadedJsonBtn) this.dom.cleanUploadedJsonBtn.addEventListener("click", () => this.cleanUploadedJson());
         if (this.dom.processUploadedImagesBtn) this.dom.processUploadedImagesBtn.addEventListener("click", () => this.processUploadedImages());
         if (this.dom.getMetaBtn) this.dom.getMetaBtn.addEventListener("click", () => this.getStoryMeta());
         if (this.dom.fetchBtn) this.dom.fetchBtn.addEventListener("click", () => this.fetchStoryStream());
+        if (this.dom.fetchDeletedBtn) this.dom.fetchDeletedBtn.addEventListener("click", () => this.fetchStoryStream({ deletedMode: true }));
         if (this.dom.cancelFetchBtn) this.dom.cancelFetchBtn.addEventListener("click", () => this.cancelActiveOperation());
         
         // Cache & Download Buttons
         if (this.dom.loadFromCacheBtn) this.dom.loadFromCacheBtn.addEventListener("click", () => this.restoreFromCache(true));
         if (this.dom.clearCacheBtn) this.dom.clearCacheBtn.addEventListener("click", () => this.clearApplicationCache());
-        if (this.dom.downloadBtn) this.dom.downloadBtn.addEventListener("click", () => this.downloadZipPackage());
         if (this.dom.openReaderBtn) this.dom.openReaderBtn.addEventListener("click", () => window.open("/reader-translator", "_blank", "noopener"));
 
         // Window Scroll
@@ -243,6 +255,7 @@ export class StoryScraperApp {
             this.dom.controlPanelToggle.setAttribute("aria-expanded", String(isOpen));
             this.dom.controlPanelToggle.textContent = isOpen ? "Close" : "Controls";
         }
+        this.syncPanelBackdrop();
     }
 
     closeControlPanel() {
@@ -252,6 +265,7 @@ export class StoryScraperApp {
             this.dom.controlPanelToggle.setAttribute("aria-expanded", "false");
             this.dom.controlPanelToggle.textContent = "Controls";
         }
+        this.syncPanelBackdrop();
     }
 
     toggleSummaryPanel() {
@@ -262,6 +276,7 @@ export class StoryScraperApp {
             this.dom.summaryPanelToggle.setAttribute("aria-expanded", String(isOpen));
             this.dom.summaryPanelToggle.textContent = isOpen ? "Close" : "Status";
         }
+        this.syncPanelBackdrop();
     }
 
     closeSummaryPanel() {
@@ -271,81 +286,123 @@ export class StoryScraperApp {
             this.dom.summaryPanelToggle.setAttribute("aria-expanded", "false");
             this.dom.summaryPanelToggle.textContent = "Status";
         }
+        this.syncPanelBackdrop();
     }
 
-    async handleJsonUpload() {
-        const file = this.dom.jsonUploadInput.files && this.dom.jsonUploadInput.files[0];
-        if (!file) return;
-
-        try {
-            FetchStoryPackage.dispose(this.currentFstoryContext);
-            this.currentFstoryContext = null;
-            this.resetWarnings();
-            this.setWorkflowStep("uploaded");
-            this.setJobStatus("Uploading", "active");
-            this.setStatus("Uploading", "Reading and sending JSON file...");
-            const storyData = JSON.parse(await file.text());
-
-            const response = await fetch("/api/story/upload-json", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ storyData }),
-            });
-            const result = await response.json();
-
-            if (!response.ok || result.error) throw new Error(result.error || "JSON upload failed");
-
-            this.currentStoryJobId = result.jobId || "";
-            this.applyStoryData(result.storyData);
-            this.setWorkflowStep("uploaded");
-            this.setJobStatus("Uploaded", "complete");
-            this.setStatus("JSON uploaded", "Fields and preview updated.");
-            this.saveCache();
-        } catch (err) {
-            console.error(err);
-            this.setJobStatus("Error", "warning");
-            this.setStatus("Upload failed", err.message || "Invalid JSON file");
-        } finally {
-            this.dom.jsonUploadInput.value = "";
-        }
+    syncPanelBackdrop() {
+        if (!this.dom.panelBackdrop) return;
+        const shouldShow = window.innerWidth <= 820 && Boolean(
+            this.dom.controlPanel?.classList.contains("is-open")
+            || this.dom.summaryPanel?.classList.contains("is-open")
+        );
+        this.dom.panelBackdrop.hidden = !shouldShow;
+        this.dom.panelBackdrop.classList.toggle("is-visible", shouldShow);
     }
 
     async handleFstoryUpload() {
         const file = this.dom.fstoryUploadInput.files && this.dom.fstoryUploadInput.files[0];
         if (!file) return;
+        let opened = null;
+        let packageAccepted = false;
 
         try {
             this.resetWarnings();
+            this.dom.insertFstoryBtn.disabled = true;
             this.setJobStatus("Opening package", "active");
             this.setStatus("Opening .fstory", "Reading manifest, story JSON, and images locally...");
-            const opened = await FetchStoryPackage.open(file);
-            const response = await fetch("/api/story/upload-json", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ storyData: opened.rawStoryData }),
+            this.setProgressBars(0, 0, 0, "0%", "Waiting", "0 / 0");
+            opened = await FetchStoryPackage.open(file, {
+                onProgress: (progress) => this.updateFstoryOpenProgress(progress),
             });
-            const result = await response.json();
-            if (!response.ok || result.error) throw new Error(result.error || "Story JSON could not be prepared");
+            const result = await this.uploadFstoryJsonWithProgress(opened.rawStoryData, opened.context.imageIndex);
 
             FetchStoryPackage.dispose(this.currentFstoryContext);
             this.currentFstoryContext = opened.context;
+            packageAccepted = true;
             this.currentStoryJobId = result.jobId || "";
             this.applyStoryData(result.storyData);
-            await StoryCache.save(opened.rawStoryData, { source: "fstory", appData: null });
+            await StoryCache.saveFstoryPackage(opened.rawStoryData, opened.context, {
+                packageName: file.name,
+            });
             this.setJobStatus("Package loaded", "complete");
+            this.setProgressBars(100, 100, 100, "100%", "Ready", `${opened.context.images.size} / ${opened.context.images.size}`);
             this.setStatus(".fstory opened", `${opened.manifest.contentFile} loaded. ZIP and images stayed in the browser.`);
         } catch (err) {
             console.error(err);
+            if (opened && !packageAccepted) FetchStoryPackage.dispose(opened.context);
             this.setJobStatus("Error", "warning");
             this.setStatus("Package open failed", err.message || "Invalid .fstory package");
         } finally {
+            this.dom.insertFstoryBtn.disabled = false;
             this.dom.fstoryUploadInput.value = "";
         }
     }
 
+    updateFstoryOpenProgress(progress) {
+        const overall = progress.overallPercent || 0;
+        const stage = progress.stagePercent || 0;
+        const workflowStage = progress.stage === "images"
+            ? "downloading"
+            : ["preparing", "ready"].includes(progress.stage)
+                ? "updating"
+                : "scanning";
+        const imageText = progress.total
+            ? `${progress.current} / ${progress.total}`
+            : progress.stage === "images" ? "0 / 0" : "—";
+
+        this.setWorkflowStep(workflowStage);
+        this.setProgressBars(
+            overall,
+            stage,
+            progress.stage === "images" ? stage : 0,
+            `${overall}%`,
+            progress.label || "Opening package",
+            imageText,
+        );
+        this.setStatus(progress.label || "Opening .fstory", progress.detail || "");
+    }
+
+    uploadFstoryJsonWithProgress(storyData, imageIndex) {
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open("POST", "/api/story/upload-json");
+            xhr.setRequestHeader("Content-Type", "application/json");
+            xhr.withCredentials = true;
+
+            xhr.upload.onprogress = (event) => {
+                const percent = event.lengthComputable
+                    ? Math.round((event.loaded / event.total) * 100)
+                    : 0;
+                const overall = 94 + Math.round(percent * 0.05);
+                this.setProgressBars(overall, percent, 100, `${overall}%`, `Uploading JSON · ${percent}%`, "Complete");
+                this.setStatus("Saving story", event.lengthComputable
+                    ? `${FetchStoryPackage.formatFileSize(event.loaded)} / ${FetchStoryPackage.formatFileSize(event.total)}`
+                    : "Uploading story JSON");
+            };
+
+            xhr.onload = () => {
+                let result;
+                try {
+                    result = JSON.parse(xhr.responseText || "{}");
+                } catch (_) {
+                    reject(new Error("Server returned an invalid response"));
+                    return;
+                }
+
+                if (xhr.status < 200 || xhr.status >= 300 || result.error) {
+                    reject(new Error(result.error || "Story JSON could not be prepared"));
+                    return;
+                }
+                resolve(result);
+            };
+            xhr.onerror = () => reject(new Error("Story JSON upload failed"));
+            xhr.send(JSON.stringify({ storyData, imageIndex }));
+        });
+    }
+
     async handleFstoryDownload() {
         if (!this.currentStoryData) {
-            this.setStatus("No story ready", "Fetch, upload JSON, or open an .fstory first.");
+            this.setStatus("No story ready", "Fetch a story or open an .fstory first.");
             return;
         }
 
@@ -354,7 +411,10 @@ export class StoryScraperApp {
             this.setJobStatus("Packaging", "active");
             if (this.currentFstoryContext) {
                 this.setStatus("Building .fstory", "Merging original package images with newly fetched images locally...");
+                this.setWorkflowStep("updating");
+                this.setProgressBars(20, 100, 100, "20%", "Packaging", "Ready");
                 const result = await FetchStoryPackage.build(this.currentStoryData, this.currentFstoryContext);
+                this.setProgressBars(85, 100, 100, "85%", "Package built", "Ready");
                 FetchStoryPackage.download(result.blob, result.fileName);
             } else {
                 if (!this.currentStoryJobId) throw new Error("Server story job is not available");
@@ -381,56 +441,16 @@ export class StoryScraperApp {
             return;
         }
         this.clearCurrentPackage(true);
+        StoryCache.clear().catch((err) => {
+            console.warn("Package cache clear failed:", err.message);
+        });
         this.setStatus("Package cleared", "Local package JSON and image memory were released.");
-    }
-
-    async cleanUploadedJson() {
-        try {
-            if (!this.currentStoryJobId && !this.currentStoryData) {
-                this.setStatus("Upload JSON first", "Insert a JSON file before cleaning it.");
-                return;
-            }
-
-            this.closeActiveStream();
-            this.resetWarnings();
-            this.setWorkflowStep("updating");
-            this.setJobStatus("Cleaning", "active");
-            this.setStatus("Cleaning JSON", "Normalizing uploaded story data...");
-            this.dom.cleanUploadedJsonBtn.disabled = true;
-            this.dom.cleanUploadedJsonBtn.textContent = "Cleaning...";
-
-            if (this.currentStoryJobId) {
-                const response = await fetch("/api/story/clean-uploaded-json", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ jobId: this.currentStoryJobId }),
-                });
-                const result = await response.json();
-
-                if (!response.ok || result.error) throw new Error(result.error || "JSON clean failed");
-                this.applyStoryData(result.storyData);
-            } else {
-                this.applyStoryData(this.normalizeStoryData(this.currentStoryData));
-            }
-
-            this.setWorkflowStep("ready");
-            this.setJobStatus("Cleaned", "complete");
-            this.setStatus("JSON cleaned", "Story format normalized and preview updated.");
-            this.saveCache();
-        } catch (err) {
-            console.error(err);
-            this.setJobStatus("Error", "warning");
-            this.setStatus("JSON clean failed", err.message || "JSON clean failed");
-        } finally {
-            this.dom.cleanUploadedJsonBtn.disabled = false;
-            this.dom.cleanUploadedJsonBtn.textContent = "Clean JSON";
-        }
     }
 
     processUploadedImages() {
         try {
             if (!this.currentStoryJobId) {
-                this.setStatus("Upload JSON first", "Insert a JSON file before processing images.");
+                this.setStatus("No story ready", "Fetch a story or open an .fstory before adding images.");
                 return;
             }
 
@@ -441,7 +461,7 @@ export class StoryScraperApp {
             this.setStatus("Processing JSON images", "Scanning posts and image links...");
             this.setProgressBars(0, 0, 0, "0%", "0%", "0%");
             this.dom.processUploadedImagesBtn.disabled = true;
-            this.dom.processUploadedImagesBtn.textContent = "Processing...";
+            this.dom.processUploadedImagesBtn.textContent = "Adding Images...";
             this.activeOperation = "images";
             this.setFetchingState(true);
 
@@ -454,7 +474,7 @@ export class StoryScraperApp {
                 console.error("Uploaded image SSE error", err);
                 this.closeActiveStream();
                 this.dom.processUploadedImagesBtn.disabled = false;
-                this.dom.processUploadedImagesBtn.textContent = "Process Images";
+                this.dom.processUploadedImagesBtn.textContent = "Add / Update Images";
                 this.activeOperation = "";
                 this.setFetchingState(false);
                 this.setJobStatus("Error", "warning");
@@ -468,7 +488,7 @@ export class StoryScraperApp {
                 if (data.error) {
                     this.closeActiveStream();
                     this.dom.processUploadedImagesBtn.disabled = false;
-                    this.dom.processUploadedImagesBtn.textContent = "Process Images";
+                    this.dom.processUploadedImagesBtn.textContent = "Add / Update Images";
                     this.activeOperation = "";
                     this.setFetchingState(false);
                     this.setJobStatus("Error", "warning");
@@ -479,15 +499,19 @@ export class StoryScraperApp {
                 if (data.done) {
                     this.closeActiveStream();
                     this.dom.processUploadedImagesBtn.disabled = false;
-                    this.dom.processUploadedImagesBtn.textContent = "Re-process Images";
+                    this.dom.processUploadedImagesBtn.textContent = "Update Images";
                     this.activeOperation = "";
                     this.setFetchingState(false);
                     this.setWorkflowStep("ready");
-                    this.applyStoryData(data.storyData);
+                    this.applyStoryData(this.prepareProcessedStoryData(data.storyData, data.imageIndex));
                     const stats = data.stats || {};
                     this.updateWarningsFromStats(stats);
                     this.setJobStatus("Ready", "complete");
-                    this.setStatus("Images processed", `${stats.downloadedImages || 0} downloaded, ${stats.skippedImages || 0} skipped`);
+                    const indexStats = stats.index || {};
+                    this.setStatus(
+                        "Images processed",
+                        `${stats.downloadedImages || 0} downloaded, ${stats.duplicateImages || 0} duplicates, ${indexStats.available || 0} available, ${stats.skippedImages || 0} failed`,
+                    );
                     this.saveCache();
                     return;
                 }
@@ -508,7 +532,10 @@ export class StoryScraperApp {
 
                 this.setProgressBars(overallPercent, pagePercent, imagePercent, overallText, pageText, imageText);
                 this.setWorkflowStep(data.totalImages ? "downloading" : "scanning");
-                this.setStatus(data.message || "Processing JSON images", overallText);
+                this.setStatus(
+                    data.message || "Processing JSON images",
+                    `${overallText} · ${data.alreadyAvailable || 0} available · ${data.duplicateImages || 0} duplicates`,
+                );
                 this.updateWarningsFromStats(data);
                 this.updateStats({
                     matchedPosts: data.processedPosts || 0,
@@ -533,6 +560,27 @@ export class StoryScraperApp {
             this.setJobStatus("Error", "warning");
             this.setStatus("Image processing failed", err.message || "Image processing failed");
         }
+    }
+
+    prepareProcessedStoryData(storyData, imageIndex) {
+        if (!this.currentFstoryContext || !this.currentStoryJobId || !imageIndex) return storyData;
+        const availablePaths = new Set(
+            Object.values(imageIndex.images || {})
+                .filter((entry) => entry.status === "available" && entry.path)
+                .map((entry) => String(entry.path).replace(/\\/g, "/").replace(/^\.\/+/, "")),
+        );
+        const prepared = JSON.parse(JSON.stringify(storyData));
+        for (const section of ["eng", "hin"]) {
+            for (const key of Object.keys(prepared.posts?.[section] || {})) {
+                prepared.posts[section][key] = String(prepared.posts[section][key] || "").replace(
+                    /\bsrc=(["'])(?:\.\/)?(images\/[^"']+)\1/gi,
+                    (match, quote, imagePath) => availablePaths.has(imagePath)
+                        ? `src=${quote}/temp/jobs/${this.currentStoryJobId}/${imagePath}${quote}`
+                        : match,
+                );
+            }
+        }
+        return prepared;
     }
 
     async getStoryMeta() {
@@ -672,9 +720,11 @@ export class StoryScraperApp {
         }
     }
 
-    fetchStoryStream() {
+    fetchStoryStream(options = {}) {
         this.allowTempPageLoading = true;
-        const appendFromJson = this.dom.appendFromJson.checked;
+        const resumeContext = options.resumeContext || null;
+        const deletedMode = Boolean(options.deletedMode || resumeContext?.deletedMode);
+        const appendFromJson = Boolean(resumeContext) || this.dom.appendFromJson.checked;
         if (!appendFromJson) {
             FetchStoryPackage.dispose(this.currentFstoryContext);
             this.currentFstoryContext = null;
@@ -686,8 +736,11 @@ export class StoryScraperApp {
         this.resetWarnings();
         this.setWorkflowStep("scanning");
         this.setProgressBars(0, 0, 0, "0%", "0%", "0%");
-        this.setJobStatus("Fetching", "active");
-        this.setStatus("Starting fetch", "Preparing source and page range...");
+        this.setJobStatus(deletedMode ? "Deleted Fetch" : "Fetching", "active");
+        this.setStatus(
+            deletedMode ? "Starting deleted-story fetch" : "Starting fetch",
+            deletedMode ? "Reading expandable quoted posts from the selected pages..." : "Preparing source and page range..."
+        );
         
         const existingPostCount = this.dom.contentDiv.querySelectorAll(".story-page").length;
         this.updateStats({ matchedPosts: appendFromJson ? existingPostCount : 0, downloadedImages: 0, skippedImages: 0 });
@@ -708,24 +761,46 @@ export class StoryScraperApp {
         };
         this.updateStoryMeta(this.currentStoryMeta);
 
-        const url = this.dom.urlInput.value.trim();
-        const author = this.dom.authorName.value.trim();
-        const startPage = this.dom.startPage.value;
-        const endPage = this.dom.endPage.value;
-        const loadImages = this.dom.loadImages.checked;
+        const url = resumeContext?.url || this.dom.urlInput.value.trim();
+        const author = resumeContext?.author || this.dom.authorName.value.trim();
+        const startPage = resumeContext?.startPage || this.dom.startPage.value;
+        const endPage = resumeContext?.endPage || this.dom.endPage.value;
+        const loadImages = resumeContext ? resumeContext.loadImages !== false : this.dom.loadImages.checked;
+        const imageConcurrency = resumeContext?.imageConcurrency || this.getClampedInputValue(this.dom.imageConcurrency, 3, 1, 10);
+        const imageRetries = resumeContext?.imageRetries || this.getClampedInputValue(this.dom.imageRetries, 3, 1, 5);
+        const jobId = resumeContext?.jobId || this.currentStoryJobId || this.createClientJobId();
+        this.currentStoryJobId = jobId;
+        this.dom.appendFromJson.checked = appendFromJson;
 
         const params = new URLSearchParams({ url, author });
         if (startPage) params.set("startPage", startPage);
         if (endPage) params.set("endPage", endPage);
         params.set("loadImages", loadImages ? "1" : "0");
+        params.set("imageConcurrency", String(imageConcurrency));
+        params.set("imageRetries", String(imageRetries));
         params.set("append", appendFromJson ? "1" : "0");
-        if (appendFromJson && this.currentStoryJobId) {
-            params.set("jobId", this.currentStoryJobId);
-        }
+        params.set("jobId", jobId);
+        if (deletedMode) params.set("mode", "deleted");
+
+        this.saveActiveFetch({
+            jobId,
+            url,
+            author,
+            startPage,
+            endPage,
+            loadImages,
+            imageConcurrency,
+            imageRetries,
+            deletedMode,
+            startedAt: resumeContext?.startedAt || this.fetchStartedAt.toISOString(),
+        });
 
         this.closeActiveStream();
         this.activeOperation = "fetch";
         this.setFetchingState(true);
+        if (resumeContext) {
+            this.setStatus("Resuming fetch", `Continuing after page ${this.currentStoryMeta["last-page-no"] || 0}...`);
+        }
 
         this.activeEventSource = new EventSource(`/api/story/stream?${params.toString()}`, { withCredentials: true });
 
@@ -748,6 +823,7 @@ export class StoryScraperApp {
                 this.setStatus("Fetch failed", data.error);
                 this.activeOperation = "";
                 this.setFetchingState(false);
+                if (data.error !== "Fetch cancelled") this.clearActiveFetch();
                 return;
             }
 
@@ -758,9 +834,13 @@ export class StoryScraperApp {
                 this.setWorkflowStep("ready");
                 this.setProgressBars(100, 100, 100, "100%", "100%", "100%");
                 this.setJobStatus("Ready", "complete");
-                this.setStatus("Fetch complete", "Story JSON and preview are ready.");
+                this.setStatus(
+                    deletedMode ? "Deleted-story fetch complete" : "Fetch complete",
+                    "Story JSON and preview are ready."
+                );
                 this.activeOperation = "";
                 this.setFetchingState(false);
+                this.clearActiveFetch();
                 
                 const totalLoadedPages = this.dom.contentDiv.querySelectorAll('.story-page').length;
                 this.currentPage = totalLoadedPages + 1;
@@ -844,6 +924,7 @@ export class StoryScraperApp {
         const cancelledOperation = this.activeOperation;
         this.closeActiveStream();
         this.activeOperation = "";
+        this.clearActiveFetch();
         this.setFetchingState(false);
         if (cancelledOperation === "fetch") {
             this.finishCurrentStoryMeta();
@@ -879,6 +960,10 @@ export class StoryScraperApp {
             this.allowTempPageLoading = false;
             this.currentStoryJobId = data.jobId || "";
 
+            if (data.source === "fstory") {
+                await this.restoreCachedFstoryPackage(data);
+            }
+
             if (data.storyData) {
                 this.applyStoryData(data.storyData, { enableAppend: false, jobId: this.currentStoryJobId });
             } else {
@@ -912,9 +997,60 @@ export class StoryScraperApp {
         }
     }
 
+    async restoreInterruptedFetch() {
+        const context = this.loadActiveFetch();
+        if (!context?.jobId || !context.url) return false;
+
+        this.currentStoryJobId = context.jobId;
+        this.dom.urlInput.value = context.url;
+        this.dom.authorName.value = context.author || "";
+        this.dom.startPage.value = context.startPage || "";
+        this.dom.endPage.value = context.endPage || "";
+        this.dom.loadImages.checked = context.loadImages !== false;
+        this.dom.appendFromJson.checked = true;
+        this.setJobStatus("Recovering", "active");
+        this.setStatus("Restoring interrupted fetch", "Loading saved pages from the server...");
+
+        await new Promise((resolve) => setTimeout(resolve, 800));
+
+        try {
+            const partialStory = await this.loadJobStory(context.jobId);
+            this.applyStoryData(partialStory, {
+                enableAppend: true,
+                jobId: context.jobId,
+            });
+            const normalized = this.normalizeStoryData(partialStory);
+            const lastPage = normalized["last-page-no"] || 0;
+            const totalPage = normalized.totalPage || 0;
+            const percent = totalPage ? Math.min(99, Math.round((lastPage / totalPage) * 100)) : 0;
+
+            this.setWorkflowStep("scanning");
+            this.setProgressBars(
+                percent,
+                0,
+                0,
+                totalPage ? `Page ${lastPage}/${totalPage} | ${percent}%` : `${percent}%`,
+                `Page ${lastPage}`,
+                context.loadImages === false ? "Disabled" : "Waiting"
+            );
+            this.setJobStatus("Resuming", "active");
+            this.setStatus("Fetch interrupted by refresh", `Saved through page ${lastPage}. Resuming now...`);
+
+            window.setTimeout(() => this.fetchStoryStream({ resumeContext: context }), 250);
+            return true;
+        } catch (err) {
+            console.warn("Interrupted fetch restore failed:", err.message);
+            this.clearActiveFetch();
+            this.setJobStatus("Interrupted", "warning");
+            this.setStatus("Resume unavailable", "The partial server job could not be restored.");
+            return false;
+        }
+    }
+
     async clearApplicationCache() {
         localStorage.removeItem(this.CONFIG.CACHE_KEY);
         await this.clearBrowserCache();
+        this.clearActiveFetch();
         FetchStoryPackage.dispose(this.currentFstoryContext);
         this.currentFstoryContext = null;
         this.allowTempPageLoading = false;
@@ -943,62 +1079,57 @@ export class StoryScraperApp {
         this.updateEmptyState();
     }
 
-    async downloadZipPackage() {
-        const title = this.dom.storyTitle.textContent.trim() || "story";
-        try {
-            if (!this.currentStoryJobId) {
-                this.setStatus("No story ready", "Fetch or upload a story first.");
-                return;
-            }
-
-            this.setWorkflowStep("updating");
-            this.setJobStatus("Packaging", "active");
-            this.setStatus("Preparing ZIP", "Preparing files...");
-            
-            const response = await fetch('/api/story/download', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title, jobId: this.currentStoryJobId })
-            });
-
-            if (!response.ok) throw new Error("ZIP generation failed");
-
-            this.setStatus("Preparing ZIP", "Creating download file...");
-            const blob = await response.blob();
-            this.setStatus("ZIP ready", "Starting browser download...");
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${this.sanitizeFileName(title)}.zip`;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            window.URL.revokeObjectURL(url);
-            
-            this.setWorkflowStep("ready");
-            this.setJobStatus("Ready", "complete");
-            this.setStatus("Download complete", "ZIP file has been downloaded.");
-        } catch (err) {
-            console.error(err);
-            this.setJobStatus("Error", "warning");
-            this.setStatus("Download failed", err.message || "Download failed.");
-        }
-    }
-
     async downloadServerFile(endpoint, fallbackName) {
         const title = this.dom.storyTitle.textContent.trim() || "story";
-        const response = await fetch(endpoint, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ title, jobId: this.currentStoryJobId }),
-        });
-        if (!response.ok) {
-            const message = await response.text();
-            throw new Error(message || "Download generation failed");
-        }
+        this.setWorkflowStep("updating");
+        this.setProgressBars(10, 100, 100, "10%", "Preparing", "Ready");
 
-        const blob = await response.blob();
-        const disposition = response.headers.get("Content-Disposition") || "";
+        const blob = await new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open("POST", endpoint);
+            xhr.setRequestHeader("Content-Type", "application/json");
+            xhr.responseType = "blob";
+            xhr.withCredentials = true;
+
+            xhr.onprogress = (event) => {
+                if (!event.lengthComputable) {
+                    this.setProgressBars(45, 100, 100, "Packaging", "Server working", "Ready");
+                    this.setStatus("Building .fstory", "Server is creating ZIP and streaming it...");
+                    return;
+                }
+
+                const percent = Math.round((event.loaded / event.total) * 100);
+                const overall = 15 + Math.round(percent * 0.8);
+                this.setProgressBars(
+                    overall,
+                    100,
+                    100,
+                    `${overall}%`,
+                    `Downloading ${percent}%`,
+                    FetchStoryPackage.formatFileSize(event.loaded),
+                );
+                this.setStatus(
+                    "Downloading .fstory",
+                    `${FetchStoryPackage.formatFileSize(event.loaded)} / ${FetchStoryPackage.formatFileSize(event.total)}`
+                );
+            };
+
+            xhr.onload = () => {
+                if (xhr.status < 200 || xhr.status >= 300) {
+                    readBlobText(xhr.response).then((message) => {
+                        reject(new Error(message || "Download generation failed"));
+                    });
+                    return;
+                }
+                this.pendingDownloadDisposition = xhr.getResponseHeader("Content-Disposition") || "";
+                resolve(xhr.response);
+            };
+            xhr.onerror = () => reject(new Error("Download failed"));
+            xhr.send(JSON.stringify({ title, jobId: this.currentStoryJobId }));
+        });
+
+        const disposition = this.pendingDownloadDisposition || "";
+        this.pendingDownloadDisposition = "";
         const encodedName = disposition.match(/filename\*=UTF-8''([^;]+)/i);
         const plainName = disposition.match(/filename="?([^";]+)"?/i);
         const fileName = encodedName
@@ -1006,6 +1137,7 @@ export class StoryScraperApp {
             : plainName
             ? plainName[1]
             : fallbackName;
+        this.setProgressBars(100, 100, 100, "100%", "Downloaded", "Ready");
         FetchStoryPackage.download(blob, fileName);
     }
 
@@ -1188,6 +1320,14 @@ export class StoryScraperApp {
         return Math.max(0, Math.min(100, numeric));
     }
 
+    getClampedInputValue(input, fallback, min, max) {
+        const numeric = Number.parseInt(input && input.value, 10);
+        const value = Number.isInteger(numeric) ? numeric : fallback;
+        const clamped = Math.max(min, Math.min(max, value));
+        if (input) input.value = String(clamped);
+        return clamped;
+    }
+
     setWorkflowStep(stepName) {
         if (!this.dom.statusTimeline) return;
 
@@ -1358,7 +1498,7 @@ export class StoryScraperApp {
 
     setFetchingState(isFetching) {
         if (this.dom.fetchBtn) this.dom.fetchBtn.disabled = isFetching;
-        if (this.dom.cleanUploadedJsonBtn) this.dom.cleanUploadedJsonBtn.disabled = isFetching;
+        if (this.dom.fetchDeletedBtn) this.dom.fetchDeletedBtn.disabled = isFetching;
         if (this.dom.cancelFetchBtn) {
             this.dom.cancelFetchBtn.disabled = !isFetching;
             this.dom.cancelFetchBtn.textContent = this.activeOperation === "images" ? "Cancel Process" : "Cancel Fetch";
@@ -1412,16 +1552,90 @@ export class StoryScraperApp {
         return {
             ...(record.appData || {}),
             storyData: record.storyData,
+            source: record.source,
             savedAt: record.updatedAt,
         };
+    }
+
+    async restoreCachedFstoryPackage(cacheData = {}) {
+        const storedPackage = await StoryCache.loadFstoryPackage();
+        if (storedPackage?.meta) {
+            const context = FetchStoryPackage.createContextFromStoredPackage(storedPackage);
+            FetchStoryPackage.dispose(this.currentFstoryContext);
+            this.currentFstoryContext = context;
+            this.setProgressBars(100, 100, 100, "100%", "Images restored", `${context.images.size} / ${context.images.size}`);
+            this.setStatus("Cached .fstory restored", `${context.sourceName} images loaded from IndexedDB.`);
+            return true;
+        }
+
+        if (cacheData.packageBlob) {
+            const packageName = cacheData.packageName || "cached-story.fstory";
+            const packageFile = cacheData.packageBlob instanceof File
+                ? cacheData.packageBlob
+                : new File([cacheData.packageBlob], packageName, { type: cacheData.packageBlob.type || "application/zip" });
+            const opened = await FetchStoryPackage.open(packageFile, {
+                onProgress: (progress) => this.updateFstoryOpenProgress(progress),
+            });
+            FetchStoryPackage.dispose(this.currentFstoryContext);
+            this.currentFstoryContext = opened.context;
+            await StoryCache.saveFstoryPackage(opened.rawStoryData, opened.context, { packageName });
+            this.setStatus("Cached .fstory migrated", `${opened.context.images.size} images saved to IndexedDB.`);
+            return true;
+        }
+
+        if (!storedPackage?.meta) {
+            this.setStatus("Cached package images missing", "Open the .fstory once to rebuild shared image storage.");
+            return false;
+        }
     }
 
     async clearBrowserCache() {
         return StoryCache.clear();
     }
+
+    saveActiveFetch(context) {
+        localStorage.setItem(this.CONFIG.ACTIVE_FETCH_KEY, JSON.stringify({
+            ...context,
+            savedAt: new Date().toISOString(),
+        }));
+    }
+
+    loadActiveFetch() {
+        try {
+            return JSON.parse(localStorage.getItem(this.CONFIG.ACTIVE_FETCH_KEY) || "null");
+        } catch (_) {
+            this.clearActiveFetch();
+            return null;
+        }
+    }
+
+    clearActiveFetch() {
+        localStorage.removeItem(this.CONFIG.ACTIVE_FETCH_KEY);
+    }
+
+    createClientJobId() {
+        if (crypto.randomUUID) return crypto.randomUUID();
+
+        const bytes = crypto.getRandomValues(new Uint8Array(16));
+        bytes[6] = (bytes[6] & 0x0f) | 0x40;
+        bytes[8] = (bytes[8] & 0x3f) | 0x80;
+        const hex = Array.from(bytes, (value) => value.toString(16).padStart(2, "0"));
+        return [
+            hex.slice(0, 4).join(""),
+            hex.slice(4, 6).join(""),
+            hex.slice(6, 8).join(""),
+            hex.slice(8, 10).join(""),
+            hex.slice(10, 16).join(""),
+        ].join("-");
+    }
 }
 
 // एप्लीकेशन इनिशियलाइज करने के लिए:
+function readBlobText(blob) {
+    if (!blob) return Promise.resolve("");
+    return blob.text ? blob.text() : Promise.resolve("");
+}
+
 document.addEventListener("DOMContentLoaded", () => {
     new StoryScraperApp();
 });

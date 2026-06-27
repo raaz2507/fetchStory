@@ -20,6 +20,7 @@ export class AdminDashboard {
         this.logFiles = document.getElementById("logFiles");
         this.outputFiles = document.getElementById("outputFiles");
         this.scrapedRows = document.getElementById("scrapedRows");
+        this.clearScrapedStoriesBtn = document.getElementById("clearScrapedStoriesBtn");
         this.translatedRows = document.getElementById("translatedRows");
         this.addUserForm = document.getElementById("addUserForm");
         this.newUsername = document.getElementById("newUsername");
@@ -150,6 +151,54 @@ export class AdminDashboard {
             } finally {
                 this.clearOutputsBtn.disabled = false;
                 this.clearOutputsBtn.textContent = "Clear Outputs";
+            }
+        });
+
+        this.clearScrapedStoriesBtn.addEventListener("click", async () => {
+            if (!window.confirm("Saari scraped stories permanently clear karni hain?")) return;
+
+            try {
+                this.clearScrapedStoriesBtn.disabled = true;
+                this.clearScrapedStoriesBtn.textContent = "Clearing...";
+                const response = await fetch("/api/admin/scraped-stories", { method: "DELETE" });
+                const result = await response.json();
+                if (!response.ok || result.error) {
+                    throw new Error(result.error || "Scraped stories clear failed");
+                }
+                this.showToast(`${result.deletedCount || 0} scraped stories deleted`);
+                await this.loadAdminStatus();
+            } catch (err) {
+                this.showToast(err.message || "Scraped stories clear failed");
+            } finally {
+                this.clearScrapedStoriesBtn.disabled = false;
+                this.clearScrapedStoriesBtn.textContent = "Clear All";
+            }
+        });
+
+        this.scrapedRows.addEventListener("click", async (event) => {
+            const button = event.target.closest("[data-scraped-delete]");
+            if (!button) return;
+
+            const jobId = button.dataset.scrapedDelete;
+            const storyName = button.dataset.storyName || "this story";
+            if (!window.confirm(`${storyName} ko permanently delete karna hai?`)) return;
+
+            try {
+                button.disabled = true;
+                button.textContent = "Deleting...";
+                const response = await fetch(`/api/admin/scraped-stories/${encodeURIComponent(jobId)}`, {
+                    method: "DELETE",
+                });
+                const result = await response.json();
+                if (!response.ok || result.error) {
+                    throw new Error(result.error || "Scraped story delete failed");
+                }
+                this.showToast("Scraped story deleted");
+                await this.loadAdminStatus();
+            } catch (err) {
+                button.disabled = false;
+                button.textContent = "Delete";
+                this.showToast(err.message || "Scraped story delete failed");
             }
         });
 
@@ -413,7 +462,7 @@ export class AdminDashboard {
 
     renderScrapedRows(stories) {
         if (!stories.length) {
-            this.scrapedRows.innerHTML = `<tr><td class="emptyRow" colspan="7">No scraped stories found in temp/jobs.</td></tr>`;
+            this.scrapedRows.innerHTML = `<tr><td class="emptyRow" colspan="8">No scraped stories found in temp/jobs.</td></tr>`;
             return;
         }
 
@@ -432,6 +481,14 @@ export class AdminDashboard {
                     <td>${story.downloadedImages || 0}/${story.images || 0}</td>
                     <td>${this.formatDate(story.completedAt || story.lastFetch || story.updatedAt)}</td>
                     <td>${this.escapeHtml(story.duration || "-")}</td>
+                    <td>
+                        <button
+                            type="button"
+                            class="dangerBtn"
+                            data-scraped-delete="${this.escapeHtml(story.jobId)}"
+                            data-story-name="${this.escapeHtml(story.storyName)}"
+                        >Delete</button>
+                    </td>
                 </tr>
             `;
         }).join("");

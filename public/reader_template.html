@@ -1,134 +1,276 @@
 <!doctype html>
 <html lang="hi">
-	<head>
-		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<title>Offline Reader Pro</title>
-		<link rel="stylesheet" href="./css/reader.css" />
-	</head>
-	<body>
-		<button class="sidebar-toggle-btn" id="sidebar-toggle-btn" type="button">
-			<span id="toggle-text">Menu</span>
-		</button>
 
-		<div class="side-control-bar" id="side-control-bar">
-			<div class="common-sidebar-controls" aria-label="Shared story controls">
-				<div class="control-group section-story">
-					<label>Story File</label>
-					<label for="jsonFile" class="btn-common browse-label">Browse JSON</label>
-					<input type="file" id="jsonFile" accept=".json" />
-					<span id="file-name-display" style="font-size: 0.8rem; opacity: 0.7; font-style: italic; text-align: center">No file chosen</span>
-				</div>
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>FetchStory Reader</title>
+	<link rel="stylesheet" href="./css/reader.css?v=6" />
+</head>
 
-				<div class="control-group section-package">
-					<label>FetchStory Package</label>
-					<label for="fstoryFile" class="btn-common browse-label">Open .fstory</label>
-					<input type="file" id="fstoryFile" accept=".fstory,application/zip" hidden />
-					<button class="btn-common download-link" id="downloadFstoryBtn" type="button">Download Updated .fstory</button>
-					<button class="btn-common clear-cache-btn" id="clearFstoryBtn" type="button">Clear Package</button>
-					<span id="fstory-status" class="small-status"></span>
-				</div>
+<body>
+	<header class="reader-header">
+		<a class="reader-brand" href="/home" aria-label="Back to Story Scraper">
+			<span class="reader-brand-mark" aria-hidden="true">FS</span>
+			<span>
+				<strong>Reader</strong>
+				<small>FetchStory</small>
+			</span>
+		</a>
 
-				<div class="control-group section-images">
-					<label for="imageFolderPicker" class="btn-common browse-label">Browse Image Folder</label>
-					<input type="file" id="imageFolderPicker" webkitdirectory directory multiple hidden />
-					<span id="image-folder-status" class="small-status"></span>
-				</div>
+		<div class="reading-progress-summary">
+			<span>Reading progress</span>
+			<strong id="read-progress">Read: 0%</strong>
+		</div>
 
-				<div class="control-group section-cache">
-					<label>Cache</label>
-					<button class="btn-common clear-cache-btn" id="clear-cache-btn">Clear Story Cache</button>
-					<button class="btn-common clear-cache-btn" id="clear-reading-progress-btn">Clear Reading Progress</button>
-				</div>
+		<div class="reader-header-actions">
+			<button class="header-action" id="lang-toggle-btn" type="button">Switch to Hindi</button>
+			<button class="header-action" id="print-btn" type="button">Print</button>
+			<button class="header-action danger-text-button" id="logoutBtn" type="button">Logout</button>
+		</div>
+	</header>
 
-				<div class="control-group section-session">
-					<label>Session</label>
-					<button class="btn-common logout-btn" id="logoutBtn" type="button">Logout</button>
-				</div>
+	<section class="story-load-bar" id="story-load-bar" aria-label="Open or load story">
+		<div class="story-load-bar-title">
+			<strong>Open Or Load Story</strong>
+			<span id="file-name-display" class="file-name">No package chosen</span>
+		</div>
+		<label for="fstoryFile" class="button-label">Open .fstory</label>
+		<input type="file" id="fstoryFile" accept=".fstory,application/zip" hidden />
+		<button class="danger-text-button package-clear-action" id="clearFstoryBtn" type="button">Clear package</button>
+		<button class="danger-text-button storage-action" id="clear-cache-btn" type="button">Clear story cache</button>
+		<button class="danger-text-button storage-action" id="clear-reading-progress-btn" type="button">Clear reading progress</button>
+		<div class="story-load-progress">
+			<progress id="fstory-progress" class="fstory-progress" value="0" max="100" hidden></progress>
+			<span id="fstory-status" class="small-status"></span>
+		</div>
+	</section>
+
+	<div class="reading-progress-track" aria-hidden="true"><span id="reading-progress-fill"></span></div>
+
+	<nav class="tool-rail" aria-label="Reader tool panels">
+		<button type="button" class="tool-rail-btn" data-tool-panel-button="reader" aria-controls="reader-tool-panel" aria-expanded="false">Reader</button>
+		<button type="button" class="tool-rail-btn" data-tool-panel-button="translator" aria-controls="translator-tool-panel" aria-expanded="false">Translate</button>
+		<button type="button" class="tool-rail-btn" data-tool-panel-button="export" aria-controls="export-tool-panel" aria-expanded="false">Export</button>
+	</nav>
+
+	<aside class="tool-panel" id="reader-tool-panel" data-tool-panel="reader" aria-label="Reader settings">
+		<header class="sidebar-header">
+			<div>
+				<strong>Reader settings</strong>
+				<small>Adjust reading and appearance</small>
 			</div>
-
-			<div class="sidebar-tabs">
-				<button type="button" class="sidebar-tab-btn active" id="reader-tab-btn">Reader</button>
-				<button type="button" class="sidebar-tab-btn" id="translator-tab-btn">Translator</button>
-			</div>
-
-			<div class="tab-panel active" id="reader-tab-panel">
-				<div class="control-group section-reading">
-					<label>Loading Mode</label>
-					<div class="statusBox">
-						<p id="read-progress">Read: 0%</p>
-					</div>
-					<button class="btn-common load-all-btn" id="load-all-btn" type="button">Load All Parts</button>
+			<button class="sidebar-close-btn" type="button" data-close-panel
+				aria-label="Close settings">×</button>
+		</header>
+			<section>
+				<button class="primary-button" id="load-all-btn" type="button">Load all parts</button>
+			</section>
+			<section class="settings-section ">
+				<div class="section-title">
+					<h2>Appearance</h2>
+					<p>Make long reading sessions comfortable.</p>
 				</div>
 
-				<div class="control-group section-font">
-					<label>Font Size</label>
+				<div class="setting-row">
+					<label>Text size</label>
 					<div class="font-controls">
-						<button class="font-btn" id="decrease-font-btn" type="button">A -</button>
-						<button class="font-btn" id="increase-font-btn" type="button">A +</button>
+						<button class="font-btn" id="decrease-font-btn" type="button"
+							aria-label="Decrease font size">A−</button>
+						<button class="font-btn" id="increase-font-btn" type="button"
+							aria-label="Increase font size">A+</button>
 					</div>
 				</div>
 
-				<div class="control-group section-theme">
-					<label>Reading Theme</label>
+				<label class="setting-field" for="theme-select">
+					<span>Reading theme</span>
 					<select class="theme-select" id="theme-select">
-						<option value="light">Light Theme</option>
-						<option value="dark">Dark Theme</option>
-						<option value="sepia">Sepia Theme</option>
-						<option value="forest">Forest Green</option>
-						<option value="cyber">Cyberpunk Neon</option>
+						<option value="light">Light</option>
+						<option value="dark">Dark</option>
+						<option value="sepia">Sepia</option>
+						<option value="forest">Forest</option>
+						<option value="cyber">Cyberpunk</option>
 					</select>
-				</div>
+				</label>
 
-				<div class="control-group section-color">
-					<label>Custom Bg Color</label>
-					<div class="color-picker-wrapper">
+				<label class="setting-field" for="bg-color-picker">
+					<span>Custom background</span>
+					<span class="color-picker-wrapper">
 						<input type="color" id="bg-color-picker" class="color-input" value="#f4f4f9" />
-						<span style="font-size: 0.85rem">Choose Custom Color</span>
-					</div>
-				</div>
+						<small>Choose color</small>
+					</span>
+				</label>
+			</section>
+	</aside>
 
-				<div class="control-group section-actions">
-					<label>Actions</label>
-					<button class="btn-common language-toggle-btn" id="lang-toggle-btn" type="button">Switch to Hindi</button>
-					<button class="btn-common print-btn" id="print-btn" type="button" style="margin-top: 8px">Print Story</button>
-				</div>
+	<aside class="tool-panel" id="translator-tool-panel" data-tool-panel="translator" aria-label="Translator settings">
+		<header class="sidebar-header">
+			<div>
+				<strong>Translator</strong>
+				<small>Create a Hindi version of the loaded story</small>
 			</div>
+			<button class="sidebar-close-btn" type="button" data-close-panel aria-label="Close translator">Ã—</button>
+		</header>
+			<section class="settings-section translator-section">
+				<div class="section-title">
+					<h2>Translate story</h2>
+					<p>Create a Hindi version of the currently loaded story.</p>
+				</div>
 
-			<div class="tab-panel" id="translator-tab-panel">
-				<div class="control-group section-translator">
-					<label>Translate</label>
-					<button class="btn-common translate-btn" id="translateBtn">Translate Story</button>
-					<button class="btn-common stop-translate-btn hide" id="stopTranslateBtn">Stop Translation</button>
-					<div class="statusBox">
-						<p id="status">Waiting...</p>
-					</div>
+				<div class="translation-actions">
+					<button class="primary-button" id="translateBtn" type="button">Translate story</button>
+					<button class="danger-button hide" id="stopTranslateBtn" type="button">Stop translation</button>
+				</div>
+
+				<div class="translation-status">
+					<span>Status</span>
+					<p id="status">Waiting for a story…</p>
 					<progress id="progressBar" value="0" max="100"></progress>
-					<div class="translator-stats">
-						<div>
-							<label for="total_words">Total Words:</label>
-							<input type="text" name="total_words" id="total_words" placeholder="0" disabled />
-						</div>
-						<div>
-							<label for="not_found_words">Not Found words:</label>
-							<input type="text" name="not_found_words" placeholder="0" id="not_found_words" disabled />
-						</div>
-						<div>
-							<label for="con_per">Conversion %:</label>
-							<input type="text" name="con_per" placeholder="0" id="con_per" disabled />
-						</div>
-					</div>
-					<a id="downloadBtn" class="hide btn-common download-link" href="#"> Download Translated JSON </a>
-					<a id="downloadNotFoundBtn" class="hide btn-common download-link" href="#"> Download Not Found Words </a>
 				</div>
+
+				<div class="dictionary-status-panel" aria-label="Dictionary source status">
+					<div class="dictionary-status-item" id="online-dictionary-status">
+						<span class="dictionary-led" aria-hidden="true"></span>
+						<span>
+							<strong>Online dictionary</strong>
+							<small id="online-dictionary-label">Not checked</small>
+						</span>
+					</div>
+					<div class="dictionary-status-item" id="offline-dictionary-status">
+						<span class="dictionary-led" aria-hidden="true"></span>
+						<span>
+							<strong>Offline dictionary</strong>
+							<small id="offline-dictionary-label">Not checked</small>
+						</span>
+					</div>
+				</div>
+
+				<div class="translator-stats">
+					<label for="total_words"><span>Total words</span><input type="text" id="total_words" placeholder="0"
+							disabled /></label>
+					<label for="not_found_words"><span>Not found</span><input type="text" id="not_found_words"
+							placeholder="0" disabled /></label>
+					<label for="con_per"><span>Conversion</span><input type="text" id="con_per" placeholder="0%"
+							disabled /></label>
+				</div>
+
+				<a id="downloadBtn" class="hide download-link" href="#">Download translated JSON</a>
+				<a id="downloadNotFoundBtn" class="hide download-link secondary-download" href="#">Download not-found
+					words</a>
+				<button id="downloadFstoryBtn" type="button">Download updated .fstory</button>
+			</section>
+	</aside>
+
+	<aside class="tool-panel" id="export-tool-panel" data-tool-panel="export" aria-label="Export settings">
+		<header class="sidebar-header">
+			<div>
+				<strong>Export</strong>
+				<small>Download PDF or TXT output</small>
 			</div>
-		</div>
-		<div class="reader-container">
-			<h1 class="story-title" id="story-main-title">Select or Load a Story...</h1>
-			<div id="content-area">Story Content</div>
-			<div id="reader-status" class="loading-status">Waiting for JSON data...</div>
-		</div>
-		<script src="/vendor/jszip/jszip.min.js"></script>
-		<script type="module" src="./js/reader.js?v=6"></script>
-	</body>
+			<button class="sidebar-close-btn" type="button" data-close-panel aria-label="Close export">Ã—</button>
+		</header>
+		<section class="settings-section pdf-export-section">
+			<div class="section-title">
+				<h2>PDF Export</h2>
+				<p>Generate a PDF in the background and track the work.</p>
+			</div>
+
+			<div class="pdf-actions">
+				<button class="primary-button" id="pdf-start-btn" type="button">Start PDF</button>
+				<button class="danger-button" id="pdf-stop-btn" type="button" disabled>Stop</button>
+			</div>
+
+			<div class="pdf-progress-box">
+				<div class="pdf-progress-header">
+					<span id="pdf-progress-label">Idle</span>
+					<strong id="pdf-progress-percent">0%</strong>
+				</div>
+				<progress id="pdf-progress-bar" value="0" max="100"></progress>
+				<p id="pdf-page-status">Page 0 / 0</p>
+			</div>
+
+			<div class="pdf-settings-grid">
+				<label class="setting-field" for="pdf-page-size">
+					<span>Page size</span>
+					<select id="pdf-page-size">
+						<option value="A4">A4</option>
+						<option value="Letter">Letter</option>
+						<option value="Legal">Legal</option>
+					</select>
+				</label>
+
+				<label class="setting-field" for="pdf-orientation">
+					<span>Orientation</span>
+					<select id="pdf-orientation">
+						<option value="portrait">Portrait</option>
+						<option value="landscape">Landscape</option>
+					</select>
+				</label>
+
+				<label class="setting-field" for="pdf-margin">
+					<span>Margins</span>
+					<select id="pdf-margin">
+						<option value="normal">Normal</option>
+						<option value="compact">Compact</option>
+						<option value="wide">Wide</option>
+					</select>
+				</label>
+
+				<label class="setting-field" for="pdf-language">
+					<span>Language</span>
+					<select id="pdf-language">
+						<option value="eng">English</option>
+						<option value="hin">Hindi</option>
+					</select>
+				</label>
+
+				<label class="toggle-setting" for="pdf-include-images">
+					<span>Images</span>
+					<input type="checkbox" id="pdf-include-images" checked />
+				</label>
+			</div>
+
+			<a id="pdf-download-link" class="hide download-link" href="#">Download PDF</a>
+		</section>
+
+		<section class="settings-section txt-export-section">
+			<div class="section-title">
+				<h2>TXT Export</h2>
+				<p>Download the selected language as plain text.</p>
+			</div>
+			<div class="pdf-actions txt-actions">
+				<button class="secondary-button" id="txt-download-btn" type="button">Download selected section as TXT</button>
+			</div>
+
+			<div class="pdf-progress-box txt-progress-box">
+				<div class="pdf-progress-header">
+					<span id="txt-progress-label">TXT idle</span>
+					<strong id="txt-progress-percent">0%</strong>
+				</div>
+				<progress id="txt-progress-bar" value="0" max="100"></progress>
+				<p id="txt-page-status">Post 0 / 0</p>
+			</div>
+		</section>
+	</aside>
+
+	<div id="sidebar-backdrop" class="sidebar-backdrop" hidden></div>
+
+	<main class="reader-shell">
+		<article class="reader-container">
+			<header class="story-header">
+				<span class="story-eyebrow">Now reading</span>
+				<h1 class="story-title" id="story-main-title">Select or load a story</h1>
+			</header>
+			<div id="content-area" class="story-content"></div>
+			<div id="reader-status" class="loading-status">
+				<span class="status-dot" aria-hidden="true"></span>
+				Waiting for story data…
+			</div>
+		</article>
+	</main>
+
+	<script src="/vendor/jszip/jszip.min.js"></script>
+	<script type="module" src="./js/reader.js?v=23"></script>
+</body>
+
 </html>

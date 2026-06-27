@@ -4,6 +4,10 @@ FetchStory scrapes supported forum stories, downloads their images, opens them i
 an offline reader, transliterates English text to Hindi, and exports ZIP or
 `.fstory` packages.
 
+`.fstory` packages use the strict version 2 format. Every package contains
+`manifest.json`, story JSON, mandatory `image-index.json`, and any available
+images. Version 1 packages are not supported.
+
 ## Requirements
 
 - Node.js 26
@@ -18,9 +22,11 @@ admin activity use SQLite through Node's built-in `node:sqlite` module.
 npm.cmd install
 npm.cmd start
 ```
-
-Open:
+## Online Link
 - `https://fetchstory.onrender.com/`
+ 
+Open:
+
 - `http://localhost:3000/home`
 - `http://localhost:3000/reader-translator`
 - `http://localhost:3000/admin`

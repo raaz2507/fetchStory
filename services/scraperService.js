@@ -31,6 +31,7 @@ async function scrapeStoryWithImages(originalURL, authorName, baseFolder, progre
 
     throwIfCancelled(signal);
     const imageCache = createImageCache();
+    const seenPostIds = new Set();
 
     const $firstPage = await fetchRequiredPage(baseURL, signal);
     const title = getTitle($firstPage, site.config);
@@ -89,7 +90,8 @@ async function scrapeStoryWithImages(originalURL, authorName, baseFolder, progre
 
                             sendProgress(progressCallback, currentPage, firstPage, lastPage, totalPagesToFetch, null, title, stats);
                         },
-                        imageCache
+                        imageCache,
+                        options.imageRetries
                     );
                     const localPath = imageResult && imageResult.localPath;
 
@@ -131,7 +133,14 @@ async function scrapeStoryWithImages(originalURL, authorName, baseFolder, progre
         stats.totalImagesOnCurrentPost = 0;
         console.info(`Page ${i} loaded, fetching content...`);
 
-        const articleBodies = findWriterPostBodies($page, writerName, site.config);
+        const articleBodies = findWriterPostBodies($page, writerName, site.config)
+            .filter((articleBody) => {
+                if (!articleBody || !articleBody.postId) return true;
+                if (seenPostIds.has(articleBody.postId)) return false;
+
+                seenPostIds.add(articleBody.postId);
+                return true;
+            });
         if (articleBodies.length === 0) {
             console.warn(`Page ${i}: No message blocks found for ${writerName}`);
         }
@@ -222,6 +231,114 @@ async function scrapeStoryWithImages(originalURL, authorName, baseFolder, progre
     };
 }
 
+async function scrapeDeletedStoryQuotes(originalURL, authorName, baseFolder, progressCallback, options = {}) {
+    const baseURL = getValidatedBaseURL(originalURL);
+    const site = getSupportedSiteOrThrow(baseURL);
+    const startPage = options.startPage || 0;
+    const endPage = options.endPage || 0;
+    const loadImages = options.loadImages !== false;
+    const signal = options.signal;
+    const publicBasePath = options.publicBasePath || "/temp";
+    const writerName = (authorName || "").trim();
+
+    throwIfCancelled(signal);
+    const imageCache = createImageCache();
+    const $firstPage = await fetchRequiredPage(baseURL, signal);
+    const title = `${getTitle($firstPage, site.config) || "Deleted Story"} - deleted quotes`;
+    const detectedLastPage = getLastPage($firstPage, site.config);
+    const lastPage = endPage > 0 && endPage <= detectedLastPage ? endPage : detectedLastPage;
+    const firstPage = startPage > 1 && startPage <= lastPage ? startPage : 1;
+    const totalPagesToFetch = lastPage - firstPage + 1;
+    const seenQuoteKeys = new Set();
+    const stats = {
+        matchedPosts: 0,
+        totalImages: 0,
+        downloadedImages: 0,
+        skippedImages: 0,
+        authorMatches: 0,
+        loadedPages: 0,
+        failedPages: 0,
+        pagePercent: 0,
+        imagePercent: loadImages ? 0 : 100,
+        currentImageIndex: 0,
+        totalImagesOnCurrentPost: 0,
+        imagesEnabled: loadImages,
+        writerName,
+    };
+
+    if (!writerName) {
+        throw createScrapeError("AUTHOR_MISSING", "Author name missing");
+    }
+
+    for (const i of createPageNumbers(firstPage, lastPage)) {
+        throwIfCancelled(signal);
+        const pageURL = getPageURL(baseURL, i);
+        const $page = i === 1 ? $firstPage : await fetchPage(pageURL, signal);
+
+        if (!$page) {
+            stats.failedPages++;
+            sendProgress(progressCallback, i, firstPage, lastPage, totalPagesToFetch, null, title, stats);
+            continue;
+        }
+
+        stats.loadedPages++;
+        const quotes = extractDeletedQuoteBlocks($page, writerName, seenQuoteKeys);
+        const totalBlocks = Math.max(quotes.length, 1);
+
+        for (let blockIndex = 0; blockIndex < quotes.length; blockIndex++) {
+            throwIfCancelled(signal);
+            const quote = quotes[blockIndex];
+            const $content = cheerio.load(quote.html || "");
+            const imgs = $content("img").toArray();
+            stats.authorMatches++;
+            stats.matchedPosts++;
+            stats.totalImages += imgs.length;
+            stats.totalImagesOnCurrentPost = loadImages ? imgs.length : 0;
+            stats.currentImageIndex = 0;
+            stats.imagePercent = loadImages && imgs.length ? 0 : 100;
+            stats.pagePercent = Math.floor(((blockIndex + 1) / totalBlocks) * 100);
+
+            if (loadImages && imgs.length) {
+                await processContentImages(
+                    imgs,
+                    $content,
+                    pageURL,
+                    baseFolder,
+                    publicBasePath,
+                    signal,
+                    imageCache,
+                    stats,
+                    (imageProgressValues) => {
+                        stats.imagePercent = getAveragePercent(imageProgressValues);
+                        sendProgress(progressCallback, i, firstPage, lastPage, totalPagesToFetch, null, title, stats);
+                    },
+                    options.imageConcurrency,
+                    options.imageRetries,
+                );
+            } else if (!loadImages) {
+                $content("img").each((_, img) => {
+                    const src = $content(img).attr("src");
+                    if (src) $content(img).attr("src", new URL(src, pageURL).href);
+                });
+            }
+
+            sendProgress(progressCallback, i, firstPage, lastPage, totalPagesToFetch, $content("body").html() + "<hr/>", title, stats);
+        }
+
+        stats.pagePercent = 100;
+        sendProgress(progressCallback, i, firstPage, lastPage, totalPagesToFetch, null, title, stats);
+    }
+
+    if (stats.loadedPages === 0) {
+        throw createScrapeError("SITE_UNREACHABLE", "Site unreachable or no pages could be loaded");
+    }
+    if (stats.matchedPosts === 0) {
+        throw createScrapeError("NO_STORY_POSTS", `No expandable quoted posts found for ${writerName}`);
+    }
+
+    return { title, stats };
+}
+
 function sendProgress(progressCallback, currentPage, firstPage, totalPages, totalPagesToFetch, html, title, stats) {
     if (!progressCallback) return;
 
@@ -272,17 +389,25 @@ function getValidatedBaseURL(url) {
 }
 
 function getBaseURL(url, domain) {
+    const parsed = new URL(url);
+    parsed.hash = "";
+
     if (domain === "xossipy.com") {
-        return url.replace(/-page-\d+\.html$/i, ".html");
+        parsed.pathname = parsed.pathname.replace(/-page-\d+\.html$/i, ".html");
+        return parsed.href;
     }
 
     if (domain === "rajsharmastories.com") {
-        const parsed = new URL(url);
         parsed.searchParams.delete("start");
         return parsed.href;
     }
 
-    return url.replace(/\/page-\d+\/?$/, "").replace(/\/?$/, "/");
+    parsed.pathname = parsed.pathname
+        .replace(/\/page-\d+\/?$/i, "/")
+        .replace(/\/post-\d+\/?$/i, "/")
+        .replace(/\/?$/, "/");
+
+    return parsed.href;
 }
 
 function getPageURL(baseURL, pageNumber) {
@@ -359,6 +484,73 @@ async function runLimited(tasks, concurrency) {
     });
 
     await Promise.all(workers);
+}
+
+async function processContentImages(
+    imgs,
+    $content,
+    pageURL,
+    baseFolder,
+    publicBasePath,
+    signal,
+    imageCache,
+    stats,
+    progressCallback,
+    imageConcurrencyOption,
+    imageRetries
+) {
+    const imageProgressValues = new Array(imgs.length).fill(0);
+    const imageConcurrency = Math.max(1, imageConcurrencyOption || 1);
+
+    await runLimited(
+        imgs.map((img, index) => async () => {
+            throwIfCancelled(signal);
+
+            const imgUrl = $content(img).attr("src");
+            if (!imgUrl) return;
+
+            try {
+                const originalImageUrl = new URL(imgUrl, pageURL).href;
+                $content(img).attr("data-original-src", originalImageUrl);
+                const imageResult = await downloadImageWithHash(
+                    originalImageUrl,
+                    baseFolder,
+                    index + 1,
+                    imgs.length,
+                    pageURL,
+                    signal,
+                    (imageProgress) => {
+                        imageProgressValues[index] = imageProgress.imagePercent || 0;
+                        stats.currentImageIndex = imageProgress.imageIndex;
+                        stats.totalImagesOnCurrentPost = imageProgress.totalImages;
+                        progressCallback(imageProgressValues);
+                    },
+                    imageCache,
+                    imageRetries
+                );
+                const localPath = imageResult && imageResult.localPath;
+
+                if (localPath) {
+                    if (imageResult.wasDownloaded) {
+                        stats.downloadedImages++;
+                    } else if (imageResult.wasDuplicate) {
+                        stats.skippedImages++;
+                    }
+                    $content(img).attr("src", `${publicBasePath}/${localPath}`);
+                } else {
+                    stats.skippedImages++;
+                }
+            } catch (err) {
+                if (err.code === "FETCH_CANCELLED" || err.name === "CanceledError") throw err;
+                stats.skippedImages++;
+                console.log(`Image skipped: ${imgUrl}`);
+            }
+
+            imageProgressValues[index] = 100;
+            progressCallback(imageProgressValues);
+        }),
+        imageConcurrency
+    );
 }
 
 function getAveragePercent(values) {
@@ -460,6 +652,63 @@ function extractPosts($, config, writerName) {
     return posts;
 }
 
+function extractDeletedQuoteBlocks($, writerName, seenQuoteKeys) {
+    const targetAuthor = normalizeName(writerName);
+    const quotes = [];
+
+    $("blockquote").each((index, el) => {
+        const quote = $(el);
+        const quoteAuthor = getQuoteAuthorName(quote);
+
+        if (normalizeName(quoteAuthor) !== targetAuthor) return;
+
+        const sourcePostId = getQuoteSourcePostId(quote);
+        const fallbackText = quote.text().replace(/\s+/g, " ").trim();
+        const key = sourcePostId || `${normalizeName(quoteAuthor)}:${fallbackText.slice(0, 160)}:${index}`;
+
+        if (seenQuoteKeys.has(key)) return;
+        seenQuoteKeys.add(key);
+
+        const cleaned = cheerio.load(quote.html() || "");
+        cleaned(".bbCodeBlock-title, .bbCodeBlock-expandLink, .js-expandLink").remove();
+        cleaned("script, style").remove();
+        cleaned("[style]").removeAttr("style");
+
+        const bodyHTML = cleaned("body").html()?.trim();
+        if (!bodyHTML) return;
+
+        quotes.push({
+            quoteAuthor,
+            sourcePostId,
+            html: bodyHTML,
+        });
+    });
+
+    return quotes;
+}
+
+function getQuoteAuthorName(quote) {
+    const dataQuote = (quote.attr("data-quote") || "").trim();
+    if (dataQuote) return dataQuote;
+
+    return quote
+        .find(".bbCodeBlock-sourceJump")
+        .first()
+        .text()
+        .replace(/\s+said:\s*$/i, "")
+        .trim();
+}
+
+function getQuoteSourcePostId(quote) {
+    const dataSource = quote.attr("data-source") || "";
+    const dataSourceMatch = dataSource.match(/post:\s*(\d+)/i);
+    if (dataSourceMatch) return dataSourceMatch[1];
+
+    const href = quote.find(".bbCodeBlock-sourceJump").first().attr("href") || "";
+    const hrefMatch = href.match(/[?&]id=(\d+)/i) || href.match(/post-(\d+)/i);
+    return hrefMatch ? hrefMatch[1] : "";
+}
+
 function getPostAuthorName(post, postConfig) {
     if (postConfig.authorAttribute) {
         return (post.attr(postConfig.authorAttribute) || "").trim();
@@ -536,4 +785,4 @@ function createScrapeError(code, message) {
     return err;
 }
 
-module.exports = { getStoryMeta, scrapeStoryWithImages };
+module.exports = { getStoryMeta, scrapeStoryWithImages, scrapeDeletedStoryQuotes };

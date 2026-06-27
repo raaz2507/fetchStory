@@ -17,14 +17,19 @@ router.get("/progress/:jobId", (req, res) => {
 		const payload = progress || {
 			current: 0,
 			total: 0,
-			done: false,
-			message: "Waiting for translation job",
+			done: true,
+			missing: true,
+			error: "Translation job not found or expired",
+			message: "Translation job unavailable",
 		};
 		res.write(`data: ${JSON.stringify(payload)}\n\n`);
-		return Boolean(progress && progress.done);
+		return Boolean(payload.done);
 	};
 
-	writeProgress();
+	if (writeProgress()) {
+		setTimeout(() => res.end(), 250);
+		return;
+	}
 	const interval = setInterval(() => {
 		if (!writeProgress()) return;
 		clearInterval(interval);

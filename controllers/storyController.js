@@ -4,10 +4,17 @@ const fsAsync = require("fs").promises;
 const crypto = require("crypto");
 
 const { sanitizeFolderName } = require("../utils/fileUtils");
-const { getStoryMeta, scrapeStoryWithImages } = require("../services/scraperService");
+const { getStoryMeta, scrapeStoryWithImages, scrapeDeletedStoryQuotes } = require("../services/scraperService");
 const { createZip } = require("../services/exportService");
 const { processStoryJsonImages } = require("../services/jsonImageProcessorService");
 const { logMemory } = require("../utils/logger");
+const {
+	IMAGE_INDEX_FILE,
+	buildImageIndexFromStory,
+	normalizeImageIndex,
+	readImageIndex,
+	writeImageIndex,
+} = require("../services/imageIndexService");
 
 
 
@@ -158,16 +165,18 @@ async function createFetchStoryPackage(jobId, title) {
 	const packageFolder = path.join(exportsFolder, `${names.baseName}_fstory`);
 	const packageImagesPath = path.join(packageFolder, "images");
 	const manifestPath = path.join(packageFolder, "manifest.json");
+	const imageIndexPath = path.join(packageFolder, IMAGE_INDEX_FILE);
 	const contentFile = `${sanitizeFolderName(names.baseName, "json")}.json`;
 	const contentPath = path.join(packageFolder, contentFile);
 	const packagePath = path.join(exportsFolder, `${names.baseName}.fstory`);
 	const previousManifest = readJsonIfExists(manifestPath);
 	const now = new Date().toISOString();
 
-	fs.mkdirSync(packageFolder, { recursive: true });
-	if (fs.existsSync(packageImagesPath)) {
-		fs.rmSync(packageImagesPath, { recursive: true, force: true });
+	if (fs.existsSync(packageFolder)) {
+		fs.rmSync(packageFolder, { recursive: true, force: true });
 	}
+	fs.mkdirSync(packageFolder, { recursive: true });
+	fs.mkdirSync(packageImagesPath, { recursive: true });
 	const sourceImagesPath = path.join(tempFolder, "images");
 	if (fs.existsSync(sourceImagesPath)) {
 		fs.cpSync(sourceImagesPath, packageImagesPath, { recursive: true });
@@ -176,11 +185,17 @@ async function createFetchStoryPackage(jobId, title) {
 	const packagedStory = normalizeStoryData(JSON.parse(JSON.stringify(storyData)));
 	rewriteStoryImagePaths(packagedStory, jobId, "images");
 	const storyText = JSON.stringify(packagedStory, null, 2);
+	const sourceImageIndexPath = path.join(tempFolder, IMAGE_INDEX_FILE);
+	const imageIndex = fs.existsSync(sourceImageIndexPath)
+		? readImageIndex(sourceImageIndexPath, true)
+		: buildImageIndexFromStory(packagedStory, packageFolder);
+	const packagedImageIndex = reconcilePackagedImageIndex(imageIndex, packagedStory, packageFolder);
+	const imageIndexText = JSON.stringify(packagedImageIndex, null, 2);
 	const engCount = Object.keys(packagedStory.posts.eng || {}).length;
 	const hinCount = Object.keys(packagedStory.posts.hin || {}).length;
 	const manifest = {
 		format: "fetchstory",
-		formatVersion: 1,
+		formatVersion: 2,
 		storyId: previousManifest && previousManifest.storyId
 			? previousManifest.storyId
 			: crypto.randomUUID(),
@@ -190,6 +205,7 @@ async function createFetchStoryPackage(jobId, title) {
 		sourceDomain: packagedStory.meta.domain || "",
 		contentFile,
 		imagesFolder: "images/",
+		imageIndexFile: IMAGE_INDEX_FILE,
 		languages: hinCount ? ["eng", "hin"] : ["eng"],
 		defaultLanguage: previousManifest && previousManifest.defaultLanguage
 			? previousManifest.defaultLanguage
@@ -210,10 +226,12 @@ async function createFetchStoryPackage(jobId, title) {
 		updatedAt: now,
 		integrity: {
 			storyChecksum: crypto.createHash("sha256").update(storyText).digest("hex"),
+			imageIndexChecksum: crypto.createHash("sha256").update(imageIndexText).digest("hex"),
 		},
 	};
 
 	fs.writeFileSync(contentPath, storyText, "utf8");
+	fs.writeFileSync(imageIndexPath, imageIndexText, "utf8");
 	fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
 	await createZip(packageFolder, packagePath);
 
@@ -228,6 +246,8 @@ async function createFetchStoryPackage(jobId, title) {
 	};
 }
 
+exports._createFetchStoryPackage = createFetchStoryPackage;
+
 function rewriteStoryImagePaths(storyData, jobId, imagesFolder) {
 	for (const section of ["eng", "hin"]) {
 		const posts = storyData.posts[section] || {};
@@ -239,6 +259,26 @@ function rewriteStoryImagePaths(storyData, jobId, imagesFolder) {
 			);
 		}
 	}
+}
+
+function reconcilePackagedImageIndex(existingIndex, storyData, packageFolder) {
+	const rebuilt = buildImageIndexFromStory(storyData, packageFolder);
+	for (const entry of Object.values(existingIndex.images || {})) {
+		for (const url of entry.originalUrls || []) {
+			if (rebuilt.urlMap[url]) continue;
+			const id = entry.id || `url_${crypto.createHash("sha256").update(url).digest("hex").slice(0, 24)}`;
+			rebuilt.images[id] = {
+				...entry,
+				id,
+				status: entry.status === "available" ? "missing" : entry.status,
+				path: entry.status === "available" ? null : entry.path,
+				sha256: entry.status === "available" ? null : entry.sha256,
+			};
+			rebuilt.urlMap[url] = id;
+		}
+	}
+	rebuilt.updatedAt = new Date().toISOString();
+	return rebuilt;
 }
 
 function readJsonIfExists(filePath) {
@@ -273,21 +313,27 @@ exports.uploadStoryJson = async (req, res) => {
 		const tempFolder = getJobFolder(jobId);
 		const imagesPath = path.join(tempFolder, "images");
 		const jsonFilePath = path.join(tempFolder, "story_data.json");
+		const imageIndexPath = path.join(tempFolder, IMAGE_INDEX_FILE);
 
 		fs.mkdirSync(imagesPath, { recursive: true });
 
 		const storyData = normalizeStoryData(uploadedData);
+		const imageIndex = req.body.imageIndex
+			? normalizeImageIndex(req.body.imageIndex)
+			: buildImageIndexFromStory(storyData, tempFolder);
 		writeStoryDataFile(jsonFilePath, storyData);
+		writeImageIndex(imageIndexPath, imageIndex);
 
 		res.json({
 			ok: true,
 			jobId,
 			storyData,
+			imageIndex,
 			meta: createStorySummary(storyData),
 		});
 	} catch (err) {
 		console.error("JSON upload error:", err);
-		res.status(500).json({ error: "JSON upload failed" });
+		res.status(400).json({ error: err.message || "JSON upload failed" });
 	}
 };
 
@@ -322,6 +368,7 @@ exports.processUploadedStoryImages = async (req, res) => {
 		const tempFolder = getJobFolder(jobId);
 		const imagesPath = path.join(tempFolder, "images");
 		const jsonFilePath = path.join(tempFolder, "story_data.json");
+		const imageIndexPath = path.join(tempFolder, IMAGE_INDEX_FILE);
 
 		if (!fs.existsSync(jsonFilePath)) {
 			return res.status(404).json({ error: "Upload JSON first" });
@@ -330,14 +377,17 @@ exports.processUploadedStoryImages = async (req, res) => {
 		fs.mkdirSync(imagesPath, { recursive: true });
 
 		const storyData = normalizeStoryData(JSON.parse(fs.readFileSync(jsonFilePath, "utf8")));
-		const result = await processStoryJsonImages(storyData, tempFolder);
+		const imageIndex = readImageIndex(imageIndexPath);
+		const result = await processStoryJsonImages(storyData, tempFolder, null, { imageIndex });
 
 		writeStoryDataFile(jsonFilePath, result.storyData);
+		writeImageIndex(imageIndexPath, result.imageIndex);
 
 		res.json({
 			ok: true,
 			jobId,
 			storyData: result.storyData,
+			imageIndex: result.imageIndex,
 			meta: createStorySummary(result.storyData),
 			stats: result.stats,
 		});
@@ -367,6 +417,7 @@ exports.streamUploadedStoryImages = async (req, res) => {
 		const tempFolder = getJobFolder(jobId);
 		const imagesPath = path.join(tempFolder, "images");
 		const jsonFilePath = path.join(tempFolder, "story_data.json");
+		const imageIndexPath = path.join(tempFolder, IMAGE_INDEX_FILE);
 
 		if (!fs.existsSync(jsonFilePath)) {
 			writeSseEvent(res, { error: "Upload JSON first", jobId }, controller);
@@ -376,6 +427,7 @@ exports.streamUploadedStoryImages = async (req, res) => {
 		fs.mkdirSync(imagesPath, { recursive: true });
 
 		const storyData = normalizeStoryData(JSON.parse(fs.readFileSync(jsonFilePath, "utf8")));
+		const imageIndex = readImageIndex(imageIndexPath);
 		const result = await processStoryJsonImages(
 			storyData,
 			tempFolder,
@@ -383,10 +435,11 @@ exports.streamUploadedStoryImages = async (req, res) => {
 				if (controller.signal.aborted) return;
 				writeSseEvent(res, { ...progressData, jobId }, controller);
 			},
-			{ signal: controller.signal },
+			{ signal: controller.signal, imageIndex },
 		);
 
 		writeStoryDataFile(jsonFilePath, result.storyData);
+		writeImageIndex(imageIndexPath, result.imageIndex);
 
 		if (
 			writeSseEvent(
@@ -395,6 +448,7 @@ exports.streamUploadedStoryImages = async (req, res) => {
 					done: true,
 					jobId,
 					storyData: result.storyData,
+					imageIndex: result.imageIndex,
 					meta: createStorySummary(result.storyData),
 					stats: result.stats,
 				},
@@ -432,9 +486,12 @@ exports.streamStory = async (req, res) => {
 	const requestedStartPage = parsePositiveInteger(req.query.startPage) || 1;
 	const endPage = parsePositiveInteger(req.query.endPage) || 0;
 	const loadImages = req.query.loadImages !== "0";
+	const imageConcurrency = clampInteger(req.query.imageConcurrency, 3, 1, 10);
+	const imageRetries = clampInteger(req.query.imageRetries, 3, 1, 5);
+	const deletedMode = req.query.mode === "deleted";
 	const appendMode = req.query.append === "1";
 	const requestedJobId = req.query.jobId ? getValidJobId(req.query.jobId) : "";
-	const jobId = appendMode && requestedJobId ? requestedJobId : createJobId();
+	const jobId = requestedJobId || createJobId();
 
 	const tempFolder = getJobFolder(jobId);
 	const imagesPath = path.join(tempFolder, "images");
@@ -488,7 +545,8 @@ exports.streamStory = async (req, res) => {
 		writeStoryJson = createJsonWriteBuffer(jsonFilePath);
 
 		// 4. स्क्रैपर को रन करें
-		await scrapeStoryWithImages( url, author, tempFolder, (progressData) => {
+		const scrapeRunner = deletedMode ? scrapeDeletedStoryQuotes : scrapeStoryWithImages;
+		await scrapeRunner( url, author, tempFolder, (progressData) => {
 				let shouldWriteStoryJson = false;
 				try {
 					if (progressData) {
@@ -512,7 +570,6 @@ exports.streamStory = async (req, res) => {
 						
 						
 						
-						progressData.downloadedImages = currentJson["image-downlaods"];
 						if (progressData.currentPage && progressData.currentPage !== lastKnownPage) {
 							lastKnownPage = progressData.currentPage;
 							shouldWriteStoryJson = lastKnownPage % 25 === 0;
@@ -587,6 +644,8 @@ exports.streamStory = async (req, res) => {
 				startPage,
 				endPage,
 				loadImages,
+				imageConcurrency,
+				imageRetries,
 				signal: controller.signal,
 				publicBasePath: `/temp/jobs/${jobId}`,
 			},
@@ -602,7 +661,9 @@ exports.streamStory = async (req, res) => {
 		}
 	} catch (err) {
 		flushStoryJson(writeStoryJson);
-		safeFinalizeStoryDataFile(jsonFilePath, url, author, startedAt);
+		safeFinalizeStoryDataFile(jsonFilePath, url, author, startedAt, {
+			interrupted: err.code === "FETCH_CANCELLED",
+		});
 		console.error("=== CRITICAL SCRAPER ERROR ===");
 		console.error(err);
 		console.error("==============================");
@@ -905,9 +966,9 @@ function flushStoryJson(writeStoryJson) {
 	}
 }
 
-function safeFinalizeStoryDataFile(jsonFilePath, url, author, startedAt) {
+function safeFinalizeStoryDataFile(jsonFilePath, url, author, startedAt, options = {}) {
 	try {
-		return finalizeStoryDataFile(jsonFilePath, url, author, startedAt);
+		return finalizeStoryDataFile(jsonFilePath, url, author, startedAt, options);
 	} catch (err) {
 		console.error("Final story_data.json update failed:", err.message);
 		return null;
@@ -978,7 +1039,7 @@ function ensureStoryDataMeta(storyData, url, author, startedAt) {
 	storyData.posts.hin = storyData.posts.hin || {};
 }
 
-function finalizeStoryDataFile(jsonFilePath, url, author, startedAt) {
+function finalizeStoryDataFile(jsonFilePath, url, author, startedAt, options = {}) {
 	if (!fs.existsSync(jsonFilePath)) return null;
 
 	const completedAt = new Date();
@@ -986,7 +1047,7 @@ function finalizeStoryDataFile(jsonFilePath, url, author, startedAt) {
 
 	ensureStoryDataMeta(storyData, url, author, startedAt);
 
-	storyData.meta.status = storyData.errors.hasError ? "partial" : "completed";
+	storyData.meta.status = options.interrupted || storyData.errors.hasError ? "partial" : "completed";
 
 	storyData.fetch.lastFetch = completedAt.toISOString();
 	storyData.fetch.endTime = completedAt.toISOString();
@@ -1081,6 +1142,12 @@ function formatDuration(milliseconds) {
 function parsePositiveInteger(value) {
 	const parsed = Number.parseInt(value, 10);
 	return Number.isInteger(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function clampInteger(value, fallback, min, max) {
+	const parsed = Number.parseInt(value, 10);
+	const numeric = Number.isInteger(parsed) ? parsed : fallback;
+	return Math.max(min, Math.min(max, numeric));
 }
 
 function getClientErrorMessage(err) {

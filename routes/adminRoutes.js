@@ -8,6 +8,8 @@ const {
     getAdminStatus,
     updateLogging,
     clearOutputs,
+    deleteScrapedStory,
+    clearScrapedStories,
     createUser,
     updateUser,
     deleteUser,
@@ -28,6 +30,8 @@ router.post("/logout", logout);
 router.get("/status", getAdminStatus);
 router.post("/logging", updateLogging);
 router.delete("/outputs", clearOutputs);
+router.delete("/scraped-stories", clearScrapedStories);
+router.delete("/scraped-stories/:jobId", deleteScrapedStory);
 router.post("/users", createUser);
 router.patch("/users/:id", updateUser);
 router.delete("/users/:id", deleteUser);

@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node --max-old-space-size=512 server.js",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --test tests/*.test.js",
     "dev": "nodemon server.js --ignore temp/ --ignore downloads/ --ignore translator/outputs/ --ignore logs/ --ignore data/"
   },
   "keywords": [],
@@ -21,7 +21,8 @@
     "cheerio": "^1.2.0",
     "cors": "^2.8.6",
     "express": "^5.2.1",
-    "jszip": "^3.10.1"
+    "jszip": "^3.10.1",
+    "puppeteer": "^25.2.1"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"

@@ -7,195 +7,253 @@
 		<link rel="stylesheet" href="./css/index.css" />
 	</head>
 	<body>
-		<button id="controlPanelToggle" class="controlPanelToggle" type="button" aria-controls="controlPanel" aria-expanded="false" title="Open or close story controls on mobile.">Controls</button>
-		<button id="summaryPanelToggle" class="summaryPanelToggle" type="button" aria-controls="summaryPanel" aria-expanded="false" title="Open or close progress details on mobile.">Status</button>
+		<header class="appHeader">
+			<a class="brand" href="/" aria-label="Story Scraper home">
+				<span class="brandMark" aria-hidden="true">FS</span>
+				<span>
+					<strong>Story Scraper</strong>
+					<small>Fetch, review, and package stories</small>
+				</span>
+			</a>
 
-		<section id="stickyStatusBar" class="stickyStatusBar" aria-label="Current job status" title="Compact status for the active job.">
-			<div>
-				<strong id="stickyStatusLabel">Idle</strong>
-				<span id="stickyStatusDetail">Fetch a story or insert JSON to begin.</span>
+			<div class="appHeaderActions">
+				<label class="themeControl" for="themeSelect">
+					<span>Theme</span>
+					<select id="themeSelect" title="Choose light or dark UI theme.">
+						<option value="light">Light</option>
+						<option value="dark">Dark</option>
+					</select>
+				</label>
+				<button id="openReaderBtn" class="quietButton" type="button" title="Open the reader page in a new tab.">Open Reader</button>
+				<button id="logoutBtn" class="quietButton dangerButton" type="button" title="Logout from the story app.">Logout</button>
+				<button id="summaryPanelToggle" class="mobileHeaderButton" type="button" aria-controls="summaryPanel" aria-expanded="false">Status</button>
+				<button id="controlPanelToggle" class="mobileHeaderButton primaryAction" type="button" aria-controls="controlPanel" aria-expanded="false">Controls</button>
+			</div>
+		</header>
+
+		<section id="stickyStatusBar" class="commandBar" aria-label="Current job status">
+			<div class="commandStatus">
+				<span id="jobStatusPill" class="statusPill">Idle</span>
+				<div>
+					<strong id="stickyStatusLabel">Ready</strong>
+					<span id="stickyStatusDetail">Enter a story URL or open an .fstory package.</span>
+				</div>
 			</div>
 			<progress id="stickyProgressBar" value="0" max="100" title="Overall active job progress."></progress>
+			<output id="progressText" class="commandMessage" title="Latest job message.">Ready</output>
 		</section>
 
 		<main class="dashboard">
-			<aside id="controlPanel" class="controlPanel" aria-label="Story controls" title="Controls for source, options, upload, fetch, and output actions.">
-				<header class="panelHeader">
-					<h1 title="Story Scraper dashboard">Story Scraper</h1>
-					<output id="progressText" class="panelStatus" title="Latest job message.">Ready</output>
-				</header>
+			<aside id="controlPanel" class="controlPanel" aria-label="Story controls">
+				<div class="mobilePanelHeader">
+					<strong>Story controls</strong>
+					<button class="panelCloseButton" type="button" data-close-panel="controls" aria-label="Close controls">×</button>
+				</div>
 
-				<section class="panelSection jobCard" aria-label="Current job summary" title="Single summary for the currently loaded or fetched story.">
-					<div class="jobCardHeader">
-						<h2 title="Current story job summary">Current Job</h2>
-						<span id="jobStatusPill" class="statusPill" title="Current job state.">Idle</span>
+				<section class="workflowIntro">
+					<span class="stepNumber">1</span>
+					<div>
+						<h1>Choose a source</h1>
+						<p>Paste a thread URL, then confirm the writer and page range.</p>
 					</div>
-					<dl class="jobFacts">
-						<div title="Loaded story name."><dt>Story</dt><dd id="jobStoryName">-</dd></div>
-						<div title="Total story posts currently loaded."><dt>Posts</dt><dd id="jobPostsCount">0</dd></div>
-						<div title="Total image tags found in loaded posts."><dt>Images</dt><dd id="jobImagesCount">0</dd></div>
-						<div title="Images downloaded locally."><dt>Downloads</dt><dd id="jobDownloadsCount">0</dd></div>
-					</dl>
 				</section>
 
-				<section class="panelSection" aria-label="Story source" title="Story URL, writer name, and optional page range.">
-					<h2>Source</h2>
+				<section class="panelSection sourceSection" aria-label="Story source">
 					<div class="fieldGroup">
-						<label for="urlInput" title="Paste the full story or thread URL.">Story URL</label>
-						<input type="text" id="urlInput" placeholder="https://example.com/thread/" title="Story or thread URL used for meta detection and fetching." />
+						<div class="fieldLabelRow">
+							<label for="urlInput">Story URL</label>
+							<span class="siteInfo">
+								<button class="siteInfoButton" type="button" aria-label="Show supported websites" aria-describedby="supportedSitesTooltip">i</button>
+								<span class="siteInfoTooltip" id="supportedSitesTooltip" role="tooltip">
+									<strong>Supported sites</strong>
+									<span class="supportedSiteList">
+										<span>exforum.live</span>
+										<span>xforum.live</span>
+										<span>lustyweb.live</span>
+										<span>xossipy.com</span>
+										<span>rajsharmastories.com</span>
+									</span>
+								</span>
+							</span>
+						</div>
+						<input type="url" id="urlInput" placeholder="https://example.com/thread/" autocomplete="url" />
 					</div>
 					<div class="fieldGroup">
-						<label for="authorName" title="Only posts from this writer will be collected.">Author Name</label>
-						<input type="text" id="authorName" placeholder="Author Name" title="Writer name can be filled manually or detected with Get Meta." />
+						<label for="authorName">Author name</label>
+						<input type="text" id="authorName" placeholder="Detected by Get Meta" autocomplete="off" />
 					</div>
-					<div class="splitFields pageRange">
+					<div class="splitFields">
 						<div class="fieldGroup">
-							<label for="startPage" title="First page to fetch. Leave empty for page 1.">Start Page</label>
-							<input type="number" name="startPage" id="startPage" placeholder="1" min="1" title="Starting page number." />
+							<label for="startPage">Start page</label>
+							<input type="number" name="startPage" id="startPage" placeholder="1" min="1" />
 						</div>
 						<div class="fieldGroup">
-							<label for="endPage" title="Last page to fetch. Leave empty for detected last page.">End Page</label>
-							<input type="number" name="endPage" id="endPage" placeholder="Last" min="1" title="Ending page number." />
+							<label for="endPage">End page</label>
+							<input type="number" name="endPage" id="endPage" placeholder="Last" min="1" />
 						</div>
 					</div>
 				</section>
 
-				<section class="panelSection" aria-label="Fetch options" title="Fetch behavior and display preferences.">
-					<h2>Options</h2>
-					<label class="toggleRow" for="loadImages" title="Download images while fetching and rewrite image paths for offline output.">
-						<span>Load Images</span>
-						<input type="checkbox" id="loadImages" checked title="Turn off for faster text-only fetching." />
+				<section class="panelSection compactOptions" aria-label="Fetch options">
+					<div class="sectionHeading">
+						<span class="stepNumber">2</span>
+						<div>
+							<h2>Configure</h2>
+							<p>Set how the story should be collected.</p>
+						</div>
+					</div>
+					<label class="toggleRow" for="loadImages">
+						<span><b>Download images</b><small>Keep images available offline</small></span>
+						<input type="checkbox" id="loadImages" checked />
 					</label>
-					<label class="toggleRow" for="appendFromJson" title="Continue from an uploaded JSON instead of starting fresh.">
-						<span>Append JSON</span>
-						<input type="checkbox" id="appendFromJson" title="Append mode attempts to continue from existing story data." />
+					<div class="splitFields imageOptionFields">
+						<div class="fieldGroup">
+							<label for="imageConcurrency">Parallel downloads</label>
+							<input type="number" id="imageConcurrency" value="3" min="1" max="10" />
+						</div>
+						<div class="fieldGroup">
+							<label for="imageRetries">Image retries</label>
+							<input type="number" id="imageRetries" value="3" min="1" max="5" />
+						</div>
+					</div>
+					<label class="toggleRow" for="appendFromJson">
+						<span><b>Continue current story</b><small>Append instead of starting fresh</small></span>
+						<input type="checkbox" id="appendFromJson" />
 					</label>
-					<div class="fieldGroup">
-						<label for="themeSelect" title="Switch dashboard theme.">Theme</label>
-						<select id="themeSelect" title="Choose light or dark UI theme.">
-							<option value="light">Light</option>
-							<option value="dark">Dark</option>
-						</select>
+				</section>
+
+				<section class="panelSection primaryWorkflow" aria-label="Fetch actions">
+					<div class="sectionHeading">
+						<span class="stepNumber">3</span>
+						<div>
+							<h2>Fetch</h2>
+							<p>Detect details first, then collect the story.</p>
+						</div>
+					</div>
+					<div class="primaryActions">
+						<button id="getMeta" type="button" class="quietButton">Get Meta</button>
+						<button id="fetchBtn" type="button" class="primaryAction">Fetch Story</button>
+						<button id="fetchDeletedBtn" type="button" class="quietButton fullWidth">Fetch Deleted Story</button>
+						<button id="cancelFetchBtn" type="button" class="dangerButton fullWidth" disabled>Cancel Fetch</button>
 					</div>
 				</section>
 
-				<section class="panelSection" aria-label="Story actions" title="Upload, fetch, process, and output commands.">
-					<h2>Actions</h2>
-					<input type="file" id="jsonUploadInput" accept=".json,application/json" hidden title="Select a story JSON file." />
-					<input type="file" id="fstoryUploadInput" accept=".fstory,application/zip" hidden title="Select a FetchStory package." />
-					<div class="actionGroups">
-						<div class="actionGroup section-package">
-							<h3>FetchStory Package</h3>
-							<div class="actionGrid">
-								<button id="insertFstoryBtn" type="button" title="Open a local .fstory package. The ZIP and images stay in this browser.">Open .fstory</button>
-								<button id="clearFstoryBtn" type="button" title="Release the currently opened package and its local image memory.">Clear Package</button>
+				<details class="toolsPanel">
+					<summary>
+						<span>
+							<b>Tools &amp; export</b>
+							<small>Packages, images, cache, and reader</small>
+						</span>
+					</summary>
+					<input type="file" id="fstoryUploadInput" accept=".fstory,application/zip" hidden />
+					<div class="toolGroups">
+						<section class="toolGroup">
+							<h2>Package</h2>
+							<div class="toolGrid">
+								<button id="insertFstoryBtn" type="button">Open .fstory</button>
+								<button id="downloadFstoryBtn" type="button">Download .fstory</button>
+								<button id="processUploadedImagesBtn" type="button">Add / Update Images</button>
+								<button id="clearFstoryBtn" class="dangerTextButton" type="button">Clear Package</button>
 							</div>
-						</div>
-						<div class="actionGroup section-json">
-							<h3>JSON</h3>
-							<div class="actionGrid">
-								<button id="insertJsonBtn" type="button" title="Upload an existing story JSON and update the preview.">Insert JSON</button>
-								<button id="cleanUploadedJsonBtn" type="button" title="Normalize the uploaded story JSON format.">Clean JSON</button>
-								<button id="processUploadedImagesBtn" type="button" title="Download images referenced by the uploaded JSON.">Process Images</button>
+						</section>
+						<section class="toolGroup">
+							<h2>Workspace</h2>
+							<div class="toolGrid">
+								<button id="loadFromCache" type="button">Load Cache</button>
+								<button id="clearCache" class="dangerTextButton" type="button">Clear Cache</button>
 							</div>
-						</div>
-						<div class="actionGroup section-fetch">
-							<h3>Fetch</h3>
-							<div class="actionGrid">
-								<button id="getMeta" type="button" title="Detect story title, writer, and total pages.">Get Meta</button>
-								<button id="fetchBtn" type="button" class="primaryAction" title="Fetch posts from the selected source and page range.">Fetch Story</button>
-								<button id="cancelFetchBtn" type="button" disabled title="Cancel the currently running fetch or image process.">Cancel Fetch</button>
-							</div>
-						</div>
-						<div class="actionGroup section-output">
-							<h3>Output</h3>
-							<div class="actionGrid">
-								<button id="downloadBtn" type="button" title="Download the current story JSON and images as a ZIP.">Download ZIP</button>
-								<button id="downloadFstoryBtn" type="button" title="Create the current story and images as a local FetchStory package.">Download .fstory</button>
-								<button id="openReaderBtn" type="button" title="Open the reader page in a new tab.">Open Reader</button>
-								<button id="loadFromCache" type="button" title="Restore the last saved browser cache.">Load Cache</button>
-								<button id="clearCache" type="button" title="Clear the saved browser cache and reset the preview.">Clear Cache</button>
-								<button id="logoutBtn" type="button" title="Logout from the story app.">Logout</button>
-							</div>
-						</div>
+						</section>
 					</div>
-				</section>
+				</details>
 			</aside>
 
 			<section class="workArea" aria-label="Story workspace">
-				<header class="statusHeader" title="Current story heading and compact live stats.">
-					<div>
-						<span class="eyebrow">Current Story</span>
-						<h2 class="storyTitle" title="Loaded or detected story title."></h2>
+				<header class="statusHeader">
+					<div class="storyHeading">
+						<span class="eyebrow">Current story</span>
+						<h2 class="storyTitle">No story loaded</h2>
 					</div>
-					<div class="statsArea" id="statsText" title="Compact live fetch stats.">No story loaded</div>
+					<dl class="jobFacts" aria-label="Current story totals">
+						<div><dt>Posts</dt><dd id="jobPostsCount">0</dd></div>
+						<div><dt>Images</dt><dd id="jobImagesCount">0</dd></div>
+						<div><dt>Saved</dt><dd id="jobDownloadsCount">0</dd></div>
+					</dl>
+					<span id="jobStoryName" hidden>-</span>
+					<div class="statsArea" id="statsText">No story loaded</div>
 				</header>
 
-				<section id="summaryPanel" class="summaryPanel" aria-label="Progress and metadata" title="Progress bars and timing details for the current job.">
+				<section id="summaryPanel" class="summaryPanel" aria-label="Progress and metadata">
+					<div class="mobilePanelHeader">
+						<strong>Job status</strong>
+						<button class="panelCloseButton" type="button" data-close-panel="status" aria-label="Close status">×</button>
+					</div>
+
 					<section class="progressPanel" aria-label="Fetch progress">
-						<ol id="statusTimeline" class="statusTimeline" title="Current workflow step.">
-							<li data-step="uploaded" class="is-current">Uploaded</li>
-							<li data-step="scanning">Scanning</li>
-							<li data-step="downloading">Downloading</li>
-							<li data-step="updating">Updating</li>
-							<li data-step="ready">Ready</li>
+						<ol id="statusTimeline" class="statusTimeline">
+							<li data-step="uploaded" class="is-current"><span>1</span>Source</li>
+							<li data-step="scanning"><span>2</span>Scan</li>
+							<li data-step="downloading"><span>3</span>Images</li>
+							<li data-step="updating"><span>4</span>Save</li>
+							<li data-step="ready"><span>5</span>Ready</li>
 						</ol>
 						<div class="progressGrid">
-							<div class="progressBarArea" title="Total job progress.">
-								<label for="progressBar">Overall</label>
-								<progress id="progressBar" value="0" max="100" title="Overall progress percentage."></progress>
-								<output id="overallProgressText">0%</output>
+							<div class="progressBarArea">
+								<div><label for="progressBar">Overall</label><output id="overallProgressText">0%</output></div>
+								<progress id="progressBar" value="0" max="100"></progress>
 							</div>
-							<div class="progressBarArea" title="Current page or post progress.">
-								<label for="pageProgressBar">Page</label>
-								<progress id="pageProgressBar" value="0" max="100" title="Current page processing progress."></progress>
-								<output id="pageProgressText">0%</output>
+							<div class="progressBarArea">
+								<div><label for="pageProgressBar">Current page</label><output id="pageProgressText">0%</output></div>
+								<progress id="pageProgressBar" value="0" max="100"></progress>
 							</div>
-							<div class="progressBarArea" title="Current image download progress.">
-								<label for="imageProgressBar">Image</label>
-								<progress id="imageProgressBar" value="0" max="100" title="Current image download progress."></progress>
-								<output id="imageProgressText">0%</output>
+							<div class="progressBarArea">
+								<div><label for="imageProgressBar">Images</label><output id="imageProgressText">0%</output></div>
+								<progress id="imageProgressBar" value="0" max="100"></progress>
 							</div>
 						</div>
 					</section>
 
-					<section class="storyMetaArea" id="storyMetaArea" aria-label="Story metadata" title="Timing and page details for the current story.">
-						<span title="Last time story JSON was fetched or updated."><b>Last Fetch</b><small>-</small></span>
-						<span title="Fetch start time."><b>Start</b><small>-</small></span>
-						<span title="Fetch end, cancel, or completion time."><b>End</b><small>-</small></span>
-						<span title="Total duration taken for fetch."><b>Duration</b><small>-</small></span>
-						<span title="Last page reached by the program."><b>Last Page</b><small>0</small></span>
-					</section>
+					<details class="metaDetails">
+						<summary>Timing &amp; page details</summary>
+						<section class="storyMetaArea" id="storyMetaArea" aria-label="Story metadata">
+							<span><b>Last Fetch</b><small>-</small></span>
+							<span><b>Start</b><small>-</small></span>
+							<span><b>End</b><small>-</small></span>
+							<span><b>Duration</b><small>-</small></span>
+							<span><b>Last Page</b><small>0</small></span>
+						</section>
+					</details>
 
-					<details id="warningPanel" class="warningPanel" title="Skipped images and warning summary.">
+					<details id="warningPanel" class="warningPanel" hidden>
 						<summary><span id="warningSummary">Warnings: 0</span></summary>
 						<ul id="warningList"></ul>
 					</details>
 				</section>
 
-				<section class="contentArea" aria-label="Story preview" title="Fetched or uploaded story post preview.">
-					<div class="previewToolbar" aria-label="Preview toolbar" title="Story preview controls.">
+				<section class="contentArea is-empty" aria-label="Story preview">
+					<div class="previewToolbar" aria-label="Preview toolbar">
 						<div class="previewModes" role="group" aria-label="Post display mode">
-							<button id="showAllPostsBtn" type="button" class="is-active" title="Show all loaded posts.">All</button>
-							<button id="showFirstPostsBtn" type="button" title="Show only the first 10 posts.">First 10</button>
+							<button id="showAllPostsBtn" type="button" class="is-active">All posts</button>
+							<button id="showFirstPostsBtn" type="button">First 10</button>
 						</div>
-						<label class="toolbarToggle" for="togglePreviewImages" title="Show or hide images in preview.">
-							<span>Images</span>
+						<input id="postSearchInput" type="search" placeholder="Search within posts" />
+						<label class="toolbarToggle" for="togglePreviewImages">
 							<input type="checkbox" id="togglePreviewImages" checked />
+							<span>Images</span>
 						</label>
-						<input id="postSearchInput" type="search" placeholder="Search posts" title="Search within loaded posts." />
-						<button id="scrollLatestBtn" type="button" title="Scroll to the latest visible post.">Latest</button>
+						<button id="scrollLatestBtn" type="button" class="quietButton">Latest</button>
 					</div>
 					<article id="content" title="Story content preview."></article>
-					<div id="emptyState" class="emptyState" title="No story loaded.">
-						<h2>Ready for a story</h2>
-						<p>Fetch a story or insert JSON to begin.</p>
+					<div id="emptyState" class="emptyState">
+						<div class="emptyStateIcon" aria-hidden="true">Aa</div>
+						<h2>Your story preview will appear here</h2>
+						<p>Enter a source on the left and fetch it, or open an existing .fstory package from Tools &amp; export.</p>
 					</div>
 				</section>
 			</section>
 		</main>
 
+		<div id="panelBackdrop" class="panelBackdrop" hidden></div>
 		<script src="/vendor/jszip/jszip.min.js"></script>
-		<script type="module" src="./js/index.js?v=6"></script>
+		<script type="module" src="./js/index.js?v=15"></script>
 	</body>
 </html>

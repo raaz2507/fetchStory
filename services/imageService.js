@@ -5,10 +5,10 @@ const crypto = require("crypto");
 
 const globalImageCache = createImageCache();
 
-function createImageCache() {
+function createImageCache(seed = {}) {
 	return {
-		savedHashes: new Map(),
-		savedUrls: new Map(),
+		savedHashes: new Map(seed.savedHashes || []),
+		savedUrls: new Map(seed.savedUrls || []),
 		inFlightUrls: new Map(),
 	};
 }
@@ -19,8 +19,9 @@ function resetImageCache() {
 	globalImageCache.inFlightUrls.clear();
 }
 
-async function downloadImageWithHash(imgUrl, baseFolder, imageIndex, totalImages, baseURL, signal, progressCallback, imageCache) {
+async function downloadImageWithHash(imgUrl, baseFolder, imageIndex, totalImages, baseURL, signal, progressCallback, imageCache, retryAttempts = 1) {
 	const cache = imageCache || globalImageCache;
+	const maxAttempts = Math.max(1, Math.min(5, Number.parseInt(retryAttempts, 10) || 1));
 	let finalUrl;
 	try {
 		finalUrl = new URL(imgUrl, baseURL).href;
@@ -30,8 +31,9 @@ async function downloadImageWithHash(imgUrl, baseFolder, imageIndex, totalImages
 
 	if (cache.savedUrls.has(finalUrl)) {
 		console.log(`\nDuplicate image URL skipped: ${finalUrl}`);
+		const cached = cache.savedUrls.get(finalUrl);
 		return {
-			localPath: cache.savedUrls.get(finalUrl),
+			...(typeof cached === "object" ? cached : { localPath: cached }),
 			wasDuplicate: true,
 			wasDownloaded: false,
 		};
@@ -43,16 +45,36 @@ async function downloadImageWithHash(imgUrl, baseFolder, imageIndex, totalImages
 		return result && result.localPath ? { localPath: result.localPath, wasDuplicate: true, wasDownloaded: false } : result;
 	}
 
-	const downloadPromise = downloadUniqueImage(finalUrl, baseFolder, imageIndex, totalImages, signal, progressCallback, cache);
+	const downloadPromise = downloadImageWithRetry(finalUrl, baseFolder, imageIndex, totalImages, signal, progressCallback, cache, maxAttempts);
 	cache.inFlightUrls.set(finalUrl, downloadPromise);
 
 	try {
 		const localPath = await downloadPromise;
-		if (localPath && localPath.localPath) cache.savedUrls.set(finalUrl, localPath.localPath);
+		if (localPath && localPath.localPath) cache.savedUrls.set(finalUrl, localPath);
 		return localPath;
 	} finally {
 		cache.inFlightUrls.delete(finalUrl);
 	}
+}
+
+async function downloadImageWithRetry(finalUrl, baseFolder, imageIndex, totalImages, signal, progressCallback, cache, maxAttempts) {
+	let lastError;
+
+	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+		try {
+			if (attempt > 1) {
+				console.log(`\nRetrying image [${imageIndex}/${totalImages}] attempt ${attempt}/${maxAttempts}: ${finalUrl}`);
+			}
+			return await downloadUniqueImage(finalUrl, baseFolder, imageIndex, totalImages, signal, progressCallback, cache);
+		} catch (err) {
+			if (err.code === "FETCH_CANCELLED" || err.name === "CanceledError") throw err;
+			lastError = err;
+			if (attempt === maxAttempts) break;
+			await delay(500 * attempt);
+		}
+	}
+
+	throw lastError;
 }
 
 async function downloadUniqueImage(finalUrl, baseFolder, imageIndex, totalImages, signal, progressCallback, cache) {
@@ -139,34 +161,48 @@ async function downloadUniqueImage(finalUrl, baseFolder, imageIndex, totalImages
 		response.data.pipe(writer);
 	});
 
-	const digest = hash.digest("hex").slice(0, 10);
+	const digest = hash.digest("hex");
 
 	if (cache.savedHashes.has(digest)) {
 		await removeFileWithRetry(tempFilePath);
 		console.log("\nDuplicate image skipped");
-		const duplicatePath = cache.savedHashes.get(digest);
-		cache.savedUrls.set(finalUrl, duplicatePath);
-		return {
+		const duplicate = cache.savedHashes.get(digest);
+		const duplicatePath = typeof duplicate === "object" ? duplicate.localPath : duplicate;
+		const result = {
+			...(typeof duplicate === "object" ? duplicate : {}),
 			localPath: duplicatePath,
+			sha256: digest,
+			size: downloadedLength,
+			originalUrl: finalUrl,
+		};
+		cache.savedUrls.set(finalUrl, result);
+		return {
+			...result,
 			wasDuplicate: true,
 			wasDownloaded: false,
 		};
 	}
 
 	const ext = path.extname(new URL(finalUrl).pathname) || ".jpg";
-	const fileName = `${digest}${ext}`;
+	const fileName = `${digest.slice(0, 24)}${ext}`;
 	const filePath = path.join(imagesFolder, fileName);
 
 	await renameFileWithRetry(tempFilePath, filePath);
 
 	const relativePath = `images/${fileName}`;
-	cache.savedHashes.set(digest, relativePath);
-	cache.savedUrls.set(finalUrl, relativePath);
+	const result = {
+		localPath: relativePath,
+		sha256: digest,
+		size: downloadedLength,
+		originalUrl: finalUrl,
+	};
+	cache.savedHashes.set(digest, result);
+	cache.savedUrls.set(finalUrl, result);
 
 	console.log(`\nSaved image as ${fileName}`);
 
 	return {
-		localPath: relativePath,
+		...result,
 		wasDuplicate: false,
 		wasDownloaded: true,
 	};

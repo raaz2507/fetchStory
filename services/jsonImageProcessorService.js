@@ -1,9 +1,21 @@
 const cheerio = require("cheerio");
+const fs = require("fs");
+const path = require("path");
 
 const { createImageCache, downloadImageWithHash } = require("./imageService");
+const {
+	createImageIndex,
+	getHttpUrl,
+	getIndexStats,
+	markImageFailure,
+	markMissingFiles,
+	registerAvailableImage,
+	registerPendingUrl,
+} = require("./imageIndexService");
 
 async function processStoryJsonImages(storyData, baseFolder, progressCallback, options = {}) {
 	const story = normalizeStoryData(storyData);
+	const imageIndex = markMissingFiles(options.imageIndex || createImageIndex(), baseFolder);
 	const sections = ["eng", "hin"];
 	const postQueue = sections.flatMap((sectionName) => {
 		const posts = story.posts[sectionName];
@@ -19,9 +31,11 @@ async function processStoryJsonImages(storyData, baseFolder, progressCallback, o
 		processedPosts: 0,
 		totalPosts: postQueue.length,
 		processedImages: 0,
+		alreadyAvailable: 0,
+		duplicateImages: 0,
 	};
 
-	const imageCache = createImageCache();
+	const imageCache = createImageCache(createCacheSeed(imageIndex, baseFolder));
 
 	sendProgress(progressCallback, {
 		...stats,
@@ -44,7 +58,7 @@ async function processStoryJsonImages(storyData, baseFolder, progressCallback, o
 			imagePercent: 0,
 		});
 
-		const result = await processHtmlImages(posts[item.postKey], baseFolder, stats, imageCache, options.signal, (imageProgress) => {
+		const result = await processHtmlImages(posts[item.postKey], baseFolder, stats, imageCache, imageIndex, options.signal, (imageProgress) => {
 			sendProgress(progressCallback, {
 				...stats,
 				...imageProgress,
@@ -73,10 +87,10 @@ async function processStoryJsonImages(storyData, baseFolder, progressCallback, o
 	story["image-downlaods"] = stats.downloadedImages;
 	story.lastFetch = new Date().toISOString();
 
-	return { storyData: story, stats };
+	return { storyData: story, imageIndex, stats: { ...stats, index: getIndexStats(imageIndex) } };
 }
 
-async function processHtmlImages(html, baseFolder, stats, imageCache, signal, progressCallback) {
+async function processHtmlImages(html, baseFolder, stats, imageCache, imageIndex, signal, progressCallback) {
 	if (typeof html !== "string" || !html.includes("<img")) {
 		return { html: html || "" };
 	}
@@ -90,7 +104,7 @@ async function processHtmlImages(html, baseFolder, stats, imageCache, signal, pr
 		const img = images[index];
 		const src = $(img).attr("src") || "";
 		const dataOriginalSrc = $(img).attr("data-original-src") || "";
-		const originalUrl = getDownloadableImageUrl(dataOriginalSrc) || getDownloadableImageUrl(src);
+		const originalUrl = getHttpUrl(dataOriginalSrc) || getHttpUrl(src);
 
 		if (!originalUrl) {
 			stats.missingOriginalUrls++;
@@ -103,6 +117,21 @@ async function processHtmlImages(html, baseFolder, stats, imageCache, signal, pr
 			});
 			continue;
 		}
+
+		const indexedEntry = getAvailableEntryForUrl(imageIndex, originalUrl, baseFolder);
+		if (indexedEntry) {
+			$(img).attr("src", indexedEntry.path);
+			$(img).attr("data-original-src", originalUrl);
+			stats.alreadyAvailable++;
+			stats.processedImages++;
+			sendProgress(progressCallback, {
+				currentImageIndex: index + 1,
+				totalImagesOnCurrentPost: images.length,
+				imagePercent: 100,
+			});
+			continue;
+		}
+		registerPendingUrl(imageIndex, originalUrl);
 
 		try {
 			const imageResult = await downloadImageWithHash(
@@ -132,8 +161,16 @@ async function processHtmlImages(html, baseFolder, stats, imageCache, signal, pr
 			$(img).attr("src", localPath);
 			$(img).attr("data-original-src", originalUrl);
 
+			registerAvailableImage(imageIndex, {
+				path: localPath,
+				sha256: imageResult.sha256,
+				size: imageResult.size,
+				originalUrl,
+			});
 			if (imageResult.wasDownloaded) {
 				stats.downloadedImages++;
+			} else if (imageResult.wasDuplicate) {
+				stats.duplicateImages++;
 			}
 			stats.processedImages++;
 		} catch (err) {
@@ -142,6 +179,7 @@ async function processHtmlImages(html, baseFolder, stats, imageCache, signal, pr
 			}
 			stats.skippedImages++;
 			stats.processedImages++;
+			markImageFailure(imageIndex, originalUrl, err.message);
 			console.log(`Uploaded JSON image skipped: ${originalUrl}`);
 		} finally {
 			sendProgress(progressCallback, {
@@ -155,15 +193,33 @@ async function processHtmlImages(html, baseFolder, stats, imageCache, signal, pr
 	return { html: $("body").html() || "" };
 }
 
-function getDownloadableImageUrl(value) {
-	if (!value) return "";
-
-	try {
-		const parsed = new URL(value);
-		return ["http:", "https:"].includes(parsed.protocol) ? parsed.href : "";
-	} catch (err) {
-		return "";
+function createCacheSeed(imageIndex, baseFolder) {
+	const savedHashes = [];
+	const savedUrls = [];
+	for (const entry of Object.values(imageIndex.images || {})) {
+		if (entry.status !== "available" || !entry.path || !entry.sha256) continue;
+		if (!fs.existsSync(path.join(baseFolder, entry.path))) continue;
+		const cached = {
+			localPath: entry.path,
+			sha256: entry.sha256,
+			size: entry.size,
+			originalUrl: entry.originalUrls?.[0] || "",
+		};
+		savedHashes.push([entry.sha256, cached]);
+		for (const url of entry.originalUrls || []) savedUrls.push([url, cached]);
 	}
+	return { savedHashes, savedUrls };
+}
+
+function getAvailableEntryForUrl(imageIndex, url, baseFolder) {
+	const id = imageIndex.urlMap[url];
+	const entry = id ? imageIndex.images[id] : null;
+	if (!entry || entry.status !== "available" || !entry.path) return null;
+	if (!fs.existsSync(path.join(baseFolder, entry.path))) {
+		entry.status = "missing";
+		return null;
+	}
+	return entry;
 }
 
 function normalizeStoryData(storyData) {

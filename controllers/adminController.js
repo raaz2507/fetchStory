@@ -275,6 +275,51 @@ exports.clearOutputs = async (req, res) => {
     }
 };
 
+exports.deleteScrapedStory = async (req, res) => {
+    try {
+        const jobId = getValidScrapedJobId(req.params && req.params.jobId);
+        const jobFolder = getScrapedJobFolder(jobId);
+
+        if (!fs.existsSync(jobFolder)) {
+            return res.status(404).json({ error: "Scraped story not found" });
+        }
+
+        await fs.promises.rm(jobFolder, { recursive: true, force: true });
+        await addActivity("scraped_story_removed", req.adminUser.username, `${jobId} removed`);
+        res.json({ ok: true, jobId, deletedCount: 1 });
+    } catch (err) {
+        console.error("Scraped story remove error:", err);
+        res.status(err.statusCode || 500).json({ error: "Scraped story remove failed: " + err.message });
+    }
+};
+
+exports.clearScrapedStories = async (req, res) => {
+    try {
+        const deletedJobIds = [];
+
+        if (fs.existsSync(tempJobsFolder)) {
+            const entries = await fs.promises.readdir(tempJobsFolder, { withFileTypes: true });
+            for (const entry of entries) {
+                if (!entry.isDirectory() || !isValidScrapedJobId(entry.name)) continue;
+
+                const jobFolder = getScrapedJobFolder(entry.name);
+                await fs.promises.rm(jobFolder, { recursive: true, force: true });
+                deletedJobIds.push(entry.name);
+            }
+        }
+
+        await addActivity("scraped_stories_cleared", req.adminUser.username, `${deletedJobIds.length} scraped stories removed`);
+        res.json({
+            ok: true,
+            deletedCount: deletedJobIds.length,
+            deletedJobIds,
+        });
+    } catch (err) {
+        console.error("Scraped stories clear error:", err);
+        res.status(500).json({ error: "Scraped stories clear failed: " + err.message });
+    }
+};
+
 exports.createUser = async (req, res) => {
     try {
         const store = await getStore();
@@ -475,6 +520,31 @@ async function listScrapedStories() {
     }
 
     return stories.sort((a, b) => getTimeValue(b.lastFetch || b.updatedAt) - getTimeValue(a.lastFetch || a.updatedAt));
+}
+
+function isValidScrapedJobId(value) {
+    return /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(String(value || ""));
+}
+
+function getValidScrapedJobId(value) {
+    const jobId = String(value || "").trim();
+    if (!isValidScrapedJobId(jobId)) {
+        const err = new Error("Valid scraped story jobId required");
+        err.statusCode = 400;
+        throw err;
+    }
+    return jobId;
+}
+
+function getScrapedJobFolder(jobId) {
+    const jobsRoot = path.resolve(tempJobsFolder);
+    const jobFolder = path.resolve(jobsRoot, jobId);
+    if (path.dirname(jobFolder) !== jobsRoot) {
+        const err = new Error("Unsafe scraped story path");
+        err.statusCode = 400;
+        throw err;
+    }
+    return jobFolder;
 }
 
 async function listTranslatedStories() {
